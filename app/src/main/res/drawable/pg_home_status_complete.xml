@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Green filled completion badge, white check mark. -->
+    <path android:fillColor="#159F73"
+        android:pathData="M12,2 A10,10 0,1 0,12 22 A10,10 0,1 0,12 2" />
+    <path android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2.1"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7,12.1 L10.6,15.7 L17.2,8.9" />
+</vector>

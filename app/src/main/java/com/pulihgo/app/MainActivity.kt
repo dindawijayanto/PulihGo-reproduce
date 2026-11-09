@@ -4,6 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowInsetsControllerCompat
+import java.time.LocalTime
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -27,14 +35,20 @@ import com.pulihgo.app.ui.account.LoginScreen
 import com.pulihgo.app.ui.account.RegisterScreen
 import com.pulihgo.app.ui.account.ResetLinkSentScreen
 import com.pulihgo.app.ui.account.SettingsScreen
+import com.pulihgo.app.ui.home.HomeExerciseSession
+import com.pulihgo.app.ui.home.PatientHomeScreen
 import com.pulihgo.app.ui.onboarding.OnboardingScreen
 import com.pulihgo.app.ui.theme.PulihGoTheme
+import java.time.LocalDate
 
 private const val PREF_FILE = "pulihgo_local_prefs"
 private const val ONBOARDING_SEEN_KEY = "pulihgo_onboarding_seen"
 private const val APPEARANCE_KEY = "pulihgo_appearance_mode"
 
-private enum class PatientRoute { ONBOARDING, LOGIN, REGISTER, FORGOT, LINK_SENT, HOME, SETTINGS }
+private enum class PatientRoute {
+    ONBOARDING, LOGIN, REGISTER, FORGOT, LINK_SENT, HOME, SETTINGS,
+    EXERCISE_HANDOFF, SUMMARY_HANDOFF
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +70,9 @@ class MainActivity : ComponentActivity() {
             var appearance by rememberSaveable {
                 mutableStateOf(preferences.getString(APPEARANCE_KEY, "Light") ?: "Light")
             }
+            // Only a local demo of the Home Session state. Never presented as sensor data.
+            // Erza's session repository will replace this in the integration stage.
+            var demoSessionCompleted by rememberSaveable { mutableStateOf(false) }
             val systemDark = isSystemInDarkTheme()
             val dark = when (appearance) {
                 "Dark" -> true
@@ -63,12 +80,20 @@ class MainActivity : ComponentActivity() {
                 else -> false
             }
 
+            // Edge-to-edge status/navigation icons must contrast with the selected app mode.
+            SideEffect {
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+
             PulihGoTheme(darkTheme = dark, dynamicColor = false) {
                 when (route) {
                     PatientRoute.ONBOARDING -> OnboardingScreen(onDone = {
                         preferences.edit().putBoolean(ONBOARDING_SEEN_KEY, true).apply()
                         route = PatientRoute.LOGIN
-                    })
+                    }, isDark = dark)
                     PatientRoute.LOGIN -> LoginScreen(
                         prefillEmail = draftEmail,
                         isDark = dark,
@@ -79,6 +104,8 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 accountName = patient.name
                                 accountEmail = patient.email
+                                // Demo state belongs to a login session, not a different user.
+                                demoSessionCompleted = false
                                 route = PatientRoute.HOME
                                 null
                             }
@@ -112,12 +139,18 @@ class MainActivity : ComponentActivity() {
                         isDark = dark,
                         onBackToLogin = { route = PatientRoute.LOGIN }
                     )
-                    PatientRoute.HOME -> PatientHomePlaceholder(
+                    PatientRoute.HOME -> PatientHomeScreen(
+                        patientName = accountName,
+                        sessions = if (demoSessionCompleted) listOf(
+                            // Synthetic demo sessions: 12 repetitions, peak 75°, 86% mean.
+                            HomeExerciseSession(LocalDate.now(), 4, 62, 84, time = LocalTime.of(7, 45)),
+                            HomeExerciseSession(LocalDate.now(), 5, 75, 86, time = LocalTime.of(7, 51)),
+                            HomeExerciseSession(LocalDate.now(), 3, 68, 88, time = LocalTime.of(7, 56))
+                        ) else emptyList(),
                         onSettings = { route = PatientRoute.SETTINGS },
-                        onResetOnboarding = {
-                            preferences.edit().putBoolean(ONBOARDING_SEEN_KEY, false).apply()
-                            route = PatientRoute.ONBOARDING
-                        }
+                        onStartExercise = { route = PatientRoute.EXERCISE_HANDOFF },
+                        onOpenSummary = { route = PatientRoute.SUMMARY_HANDOFF },
+                        isDark = dark
                     )
                     PatientRoute.SETTINGS -> SettingsScreen(
                         name = accountName,
@@ -129,7 +162,32 @@ class MainActivity : ComponentActivity() {
                             preferences.edit().putString(APPEARANCE_KEY, selected).apply()
                         },
                         onBack = { route = PatientRoute.HOME },
-                        onLogOut = { route = PatientRoute.LOGIN }
+                        onLogOut = {
+                            demoSessionCompleted = false
+                            route = PatientRoute.LOGIN
+                        }
+                    )
+                    PatientRoute.EXERCISE_HANDOFF -> FeatureHandoff(
+                        title = "Exercise Library",
+                        message = "This screen is owned by the team's Exercise module. The buttons below only simulate Patient Home states; no exercise is measured or saved.",
+                        onBack = { route = PatientRoute.HOME },
+                        primaryLabel = "Simulate Completed Session",
+                        onPrimary = {
+                            demoSessionCompleted = true
+                            route = PatientRoute.HOME
+                        },
+                        secondaryLabel = "Reset Demo Session",
+                        onSecondary = {
+                            demoSessionCompleted = false
+                            route = PatientRoute.HOME
+                        },
+                        isDark = dark
+                    )
+                    PatientRoute.SUMMARY_HANDOFF -> FeatureHandoff(
+                        title = "Session Summary",
+                        message = "Full summary navigation will be integrated with the team modules. Patient Home currently uses demo data only.",
+                        onBack = { route = PatientRoute.HOME },
+                        isDark = dark
                     )
                 }
             }
@@ -137,17 +195,44 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Temporary PGF-PAT-03 destination: deliberately not a real home screen yet. */
 @Composable
-private fun PatientHomePlaceholder(onSettings: () -> Unit, onResetOnboarding: () -> Unit) {
+private fun FeatureHandoff(
+    title: String,
+    message: String,
+    onBack: () -> Unit,
+    primaryLabel: String? = null,
+    onPrimary: (() -> Unit)? = null,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
+    isDark: Boolean = false
+) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize()
+            .background(if (isDark) Color(0xFF111717) else Color(0xFFF9F9F7))
+            .statusBarsPadding().navigationBarsPadding().padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Patient Home", style = MaterialTheme.typography.headlineMedium)
-        Text("Placeholder — PGF-PAT-03 will replace this screen.")
-        Button(onClick = onSettings, modifier = Modifier.padding(top = 16.dp)) { Text("Account Settings") }
-        Button(onClick = onResetOnboarding, modifier = Modifier.padding(top = 8.dp)) { Text("Test Onboarding Again") }
+        Text(title, style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground)
+        Text(message, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(top = 14.dp, bottom = 22.dp))
+        if (primaryLabel != null && onPrimary != null) {
+            Button(onClick = onPrimary,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D7C7C), contentColor = Color.White)) {
+                Text(primaryLabel, color = Color.White)
+            }
+        }
+        if (secondaryLabel != null && onSecondary != null) {
+            Button(onClick = onSecondary,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D7C7C), contentColor = Color.White)) {
+                Text(secondaryLabel, color = Color.White)
+            }
+        }
+        Button(onClick = onBack, modifier = Modifier.padding(top = 10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D7C7C), contentColor = Color.White)) {
+            Text("Back to Patient Home", color = Color.White)
+        }
     }
 }

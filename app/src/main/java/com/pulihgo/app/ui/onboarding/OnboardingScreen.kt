@@ -114,11 +114,17 @@ private val slides = listOf(
  * This screen intentionally has no dependency on Dinda's navigation/role flow.
  */
 @Composable
-fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
+fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier, isDark: Boolean = false) {
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
     val slide = slides[currentStep]
+    val screenBg = if (isDark) Color(0xFF111717) else Color.White
+    val foreground = if (isDark) Color(0xFFF2F7F6) else PrimaryText
+    val secondary = if (isDark) Color(0xFFB9C6C6) else SecondaryText
+    val subtleBorder = if (isDark) Color(0xFF496060) else NeutralBorder
+    val overlay = if (isDark) Color(0xFF111717).copy(alpha = 0.82f)
+                  else Color.White.copy(alpha = 0.75f)
 
-    Box(modifier = modifier.fillMaxSize().background(Color.White)) {
+    Box(modifier = modifier.fillMaxSize().background(screenBg)) {
         Image(
             painter = painterResource(slide.backgroundRes),
             contentDescription = null,
@@ -128,7 +134,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White.copy(alpha = 0.75f))
+                .background(overlay)
         )
 
         Column(
@@ -151,7 +157,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     contentScale = ContentScale.Crop
                 )
                 TextButton(onClick = onDone, modifier = Modifier.heightIn(min = 44.dp)) {
-                    Text("Skip", color = SecondaryText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Skip", color = secondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -209,7 +215,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         fontSize = 28.sp,
                         lineHeight = 34.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = PrimaryText,
+                        color = foreground,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(16.dp))
@@ -217,7 +223,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         text = slide.body,
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        color = SecondaryText,
+                        color = secondary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
@@ -240,7 +246,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                             .width(if (index == currentStep) 24.dp else 8.dp)
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(if (index == currentStep) slide.accent else NeutralBorder)
+                            .background(if (index == currentStep) slide.accent else subtleBorder)
                     )
                 }
             }
@@ -255,9 +261,9 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     OutlinedButton(
                         onClick = { currentStep-- },
                         modifier = Modifier.weight(1f).height(52.dp),
-                        border = BorderStroke(1.dp, NeutralBorder),
+                        border = BorderStroke(1.dp, subtleBorder),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryText)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = foreground)
                     ) {
                         Text("Back", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                     }
@@ -268,7 +274,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         .weight(if (currentStep == 0) 1f else 2f)
                         .height(52.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = slide.accent)
+                    colors = ButtonDefaults.buttonColors(containerColor = slide.accent, contentColor = Color.White)
                 ) {
                     Text(
                         if (currentStep == slides.lastIndex) "Get Started" else "Next",
