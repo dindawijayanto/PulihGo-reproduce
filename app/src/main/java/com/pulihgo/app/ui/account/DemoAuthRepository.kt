@@ -36,6 +36,11 @@ object AccountValidation {
 
     fun isValidEmail(value: String): Boolean = emailPattern.matches(value.trim())
 
+    // Same password requirement as the Register screen's hint card.
+    fun containsNumberOrSymbol(value: String): Boolean = value.any { character ->
+        character.isDigit() || (!character.isLetterOrDigit() && !character.isWhitespace())
+    }
+
     fun validateRegistration(
         name: String,
         email: String,
@@ -46,8 +51,9 @@ object AccountValidation {
         name.trim().length < 3 -> "Enter your full name (at least 3 characters)."
         !isValidEmail(email) -> "Enter a valid email address."
         password.length < 8 -> "Password must be at least 8 characters."
+        !containsNumberOrSymbol(password) -> "Password must contain at least one number or symbol."
         password != confirmation -> "Passwords do not match."
-        !acceptedTerms -> "Please accept the demo terms and safety notice."
+        !acceptedTerms -> "Please accept the Terms of Service and Privacy Policy."
         else -> null
     }
 }

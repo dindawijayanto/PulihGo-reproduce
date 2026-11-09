@@ -198,7 +198,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     Text(
                         text = slide.kicker,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
+                        fontWeight = FontWeight.ExtraBold,
                         color = slide.accent,
                         letterSpacing = 2.sp,
                         textAlign = TextAlign.Center
@@ -208,7 +208,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                         text = slide.title,
                         fontSize = 28.sp,
                         lineHeight = 34.sp,
-                        fontWeight = FontWeight.Black,
+                        fontWeight = FontWeight.ExtraBold,
                         color = PrimaryText,
                         textAlign = TextAlign.Center
                     )
@@ -273,7 +273,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
                     Text(
                         if (currentStep == slides.lastIndex) "Get Started" else "Next",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Black,
+                        fontWeight = FontWeight.ExtraBold,
                         color = Color.White
                     )
                 }
@@ -286,5 +286,7 @@ fun OnboardingScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
 @Preview(showBackground = true, widthDp = 412, heightDp = 924)
 @Composable
 private fun OnboardingPreview() {
-    OnboardingScreen(onDone = {})
+    com.pulihgo.app.ui.theme.PulihGoTheme(dynamicColor = false) {
+        OnboardingScreen(onDone = {})
+    }
 }

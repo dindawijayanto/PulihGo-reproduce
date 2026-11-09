@@ -21,5 +21,10 @@ class DemoAuthRepositoryTest {
         assertNotNull(AccountValidation.validateRegistration("A", "bad", "123", "123", false))
         assertEquals("Passwords do not match.", AccountValidation.validateRegistration("Test User", "test@example.com", "password123", "abc12345", true))
         assertNull(AccountValidation.validateRegistration("Test User", "test@example.com", "password123", "password123", true))
+        assertEquals("Password must contain at least one number or symbol.",
+            AccountValidation.validateRegistration("Test User", "test@example.com", "onlyletters", "onlyletters", true))
+        assertTrue(AccountValidation.containsNumberOrSymbol("pass12345"))
+        assertTrue(AccountValidation.containsNumberOrSymbol("password!"))
+        assertFalse(AccountValidation.containsNumberOrSymbol("lettersOnly"))
     }
 }

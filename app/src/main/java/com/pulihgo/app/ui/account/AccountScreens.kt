@@ -1,5 +1,7 @@
 package com.pulihgo.app.ui.account
 
+import androidx.annotation.DrawableRes
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,6 +38,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,15 +57,20 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulihgo.app.R
+import com.pulihgo.app.ui.theme.PlusJakartaSans
 
 /**
  * PGF-PAT-02 / Patient Hi-Fi Final in Figma (node 157:221, 157:299,
@@ -186,10 +194,10 @@ private fun CardSurface(isDark: Boolean, content: @Composable () -> Unit) {
 
 @Composable
 private fun HeaderText(title: String, subtext: String, p: AccountPalette) {
-    Text(title, fontSize = 23.sp, fontWeight = FontWeight.Bold, color = p.text,
-        textAlign = TextAlign.Center, lineHeight = 29.sp)
+    Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = p.text,
+        textAlign = TextAlign.Center, lineHeight = 32.sp)
     Spacer(Modifier.height(6.dp))
-    Text(subtext, fontSize = 13.sp, lineHeight = 19.sp, color = p.secondary,
+    Text(subtext, fontSize = 14.sp, lineHeight = 22.sp, color = p.secondary,
         textAlign = TextAlign.Center)
 }
 
@@ -202,23 +210,38 @@ private fun FormField(
     isDark: Boolean,
     modifier: Modifier = Modifier,
     password: Boolean = false,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    @DrawableRes leadingIconRes: Int? = null
 ) {
     val p = palette(isDark)
+    val fieldIcon = leadingIconRes ?: when (label) {
+        "Full Name" -> R.drawable.pg_icon_user
+        "Confirm Password" -> R.drawable.pg_icon_shield
+        "Password" -> R.drawable.pg_icon_lock
+        else -> R.drawable.pg_icon_mail
+    }
     var visible by rememberSaveable { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(label.uppercase(), color = p.secondary, fontSize = 11.sp,
+        Text(label.uppercase(), color = p.secondary, fontSize = 12.sp,
             fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
         OutlinedTextField(
             value = value,
             onValueChange = onValue,
             singleLine = true,
             placeholder = { Text(placeholder, fontSize = 14.sp, color = p.secondary.copy(alpha = .7f)) },
+            leadingIcon = {
+                Icon(painter = painterResource(fieldIcon), contentDescription = null,
+                    tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
+            },
             visualTransformation = if (password && !visible) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType),
             trailingIcon = if (password) ({
-                TextButton(onClick = { visible = !visible }) {
-                    Text(if (visible) "Hide" else "Show", fontSize = 12.sp, color = Teal)
+                IconButton(onClick = { visible = !visible }) {
+                    Icon(
+                        painter = painterResource(if (visible) R.drawable.pg_icon_eye_off else R.drawable.pg_icon_eye),
+                        contentDescription = if (visible) "Hide password" else "Show password",
+                        tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp)
+                    )
                 }
             }) else null,
             shape = RoundedCornerShape(16.dp),
@@ -232,25 +255,47 @@ private fun FormField(
                 cursorColor = Teal
             ),
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontFamily = PlusJakartaSans, fontSize = 14.sp
+            )
         )
     }
 }
 
 @Composable
 private fun PrimaryAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, danger: Boolean = false) {
+    val hasArrow = text.contains("→")
+    val buttonText = text.replace("→", "").trim()
     Button(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(52.dp),
         colors = ButtonDefaults.buttonColors(containerColor = if (danger) Danger else Teal),
         shape = RoundedCornerShape(16.dp)
-    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            Text(buttonText, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            if (hasArrow) {
+                Spacer(Modifier.width(8.dp))
+                Icon(painterResource(R.drawable.pg_icon_arrow_right), contentDescription = null,
+                    modifier = Modifier.size(17.dp), tint = Color.White)
+            }
+        }
+    }
 }
 
 @Composable
 private fun SmallLink(text: String, onClick: () -> Unit) {
+    val hasBackArrow = text.startsWith("←") || text.startsWith("‹")
+    val visibleText = text.removePrefix("←").removePrefix("‹").trim()
     TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 44.dp)) {
-        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Teal)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            if (hasBackArrow) {
+                Icon(painterResource(R.drawable.pg_icon_arrow_left), contentDescription = null,
+                    tint = Teal, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(visibleText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Teal)
+        }
     }
 }
 
@@ -284,7 +329,7 @@ fun LoginScreen(
             HeaderText("Welcome back", "Sign in to continue your recovery journey", p)
             Spacer(Modifier.height(28.dp))
             FormField("Email Address", email, { email = it; error = null }, "name@example.com",
-                isDark, keyboardType = KeyboardType.Email)
+                isDark, keyboardType = KeyboardType.Email, leadingIconRes = R.drawable.pg_icon_at)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
@@ -306,8 +351,13 @@ fun LoginScreen(
             Spacer(Modifier.height(22.dp))
             HorizontalDivider(color = p.border)
             Spacer(Modifier.height(16.dp))
-            Text("Demo UI · No production authentication is enabled", fontSize = 11.sp,
-                color = p.secondary, textAlign = TextAlign.Center)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                Icon(painterResource(R.drawable.pg_icon_shield_check), contentDescription = null,
+                    tint = Teal, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Demo UI · No production authentication is enabled", fontSize = 11.sp,
+                    color = p.secondary, textAlign = TextAlign.Center)
+            }
         }
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -326,14 +376,23 @@ private fun PasswordInput(value: String, onValue: (String) -> Unit, isDark: Bool
     var visible by rememberSaveable { mutableStateOf(false) }
     OutlinedTextField(
         value = value, onValueChange = onValue,
-        placeholder = { Text("••••••••", fontSize = 14.sp) },
+        // A grey hint indicates an empty field; actual password dots use text color.
+        placeholder = {
+            Text("••••••••", fontSize = 14.sp, color = p.secondary.copy(alpha = 0.55f))
+        },
         singleLine = true,
+        leadingIcon = {
+            Icon(painterResource(R.drawable.pg_icon_lock), contentDescription = null,
+                tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
+        },
         visualTransformation = if (visible) androidx.compose.ui.text.input.VisualTransformation.None
         else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         trailingIcon = {
-            TextButton(onClick = { visible = !visible }) {
-                Text(if (visible) "Hide" else "Show", color = Teal, fontSize = 12.sp)
+            IconButton(onClick = { visible = !visible }) {
+                Icon(painterResource(if (visible) R.drawable.pg_icon_eye_off else R.drawable.pg_icon_eye),
+                    contentDescription = if (visible) "Hide password" else "Show password",
+                    tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -343,7 +402,10 @@ private fun PasswordInput(value: String, onValue: (String) -> Unit, isDark: Bool
             focusedContainerColor = p.card, unfocusedContainerColor = p.card,
             cursorColor = Teal
         ),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        textStyle = androidx.compose.ui.text.TextStyle(
+            fontFamily = PlusJakartaSans, fontSize = 14.sp
+        )
     )
 }
 
@@ -359,14 +421,16 @@ fun RegisterScreen(
     var password by rememberSaveable { mutableStateOf("") }
     var confirmation by rememberSaveable { mutableStateOf("") }
     var accepted by rememberSaveable { mutableStateOf(false) }
-    var understands by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     AccountPage(isDark) {
         Spacer(Modifier.height(12.dp))
         BrandWordmark(p)
         Spacer(Modifier.height(24.dp))
         Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFE6F3F3)),
-            contentAlignment = Alignment.Center) { Text("♙", color = Teal, fontSize = 21.sp) }
+            contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.pg_icon_user), contentDescription = null,
+                tint = Teal, modifier = Modifier.size(21.dp))
+        }
         Spacer(Modifier.height(12.dp))
         HeaderText("Create Patient Account", "Start tracking your arm and forearm rehabilitation", p)
         Spacer(Modifier.height(24.dp))
@@ -382,15 +446,16 @@ fun RegisterScreen(
             FormField("Confirm Password", confirmation, { confirmation = it; error = null },
                 "Re-enter password", isDark, password = true)
             Spacer(Modifier.height(12.dp))
-            AgreementRow(understands, { understands = it },
-                "I understand PulihGo is a monitoring aid, not a diagnosis or a replacement for a therapist.", p)
-            AgreementRow(accepted, { accepted = it },
-                "I accept the Terms of Service and Privacy Policy for this demo.", p)
+            // Two visual requirements follow the Patient Hi-Fi Final register frame.
+            PasswordRequirementHints(password, p)
+            Spacer(Modifier.height(10.dp))
+            TermsAgreementRow(accepted, { accepted = it }, p)
             ErrorText(error)
             Spacer(Modifier.height(16.dp))
             PrimaryAction("Register  →", onClick = {
-                error = if (!understands) "Please acknowledge the safety notice." else
-                    AccountValidation.validateRegistration(name, email, password, confirmation, accepted)
+                error = AccountValidation.validateRegistration(
+                    name, email, password, confirmation, accepted
+                )
                 if (error == null) error = onRegister(name, email, password)
             })
         }
@@ -403,14 +468,67 @@ fun RegisterScreen(
     }
 }
 
+/** Visual password checklist; validated using the same rules as form submission. */
 @Composable
-private fun AgreementRow(checked: Boolean, onChecked: (Boolean) -> Unit, label: String,
-                         p: AccountPalette) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Checkbox(checked = checked, onCheckedChange = onChecked,
-            colors = CheckboxDefaults.colors(checkedColor = Teal))
-        Text(label, modifier = Modifier.padding(top = 12.dp).clickable { onChecked(!checked) },
-            color = p.secondary, fontSize = 12.sp, lineHeight = 18.sp)
+private fun PasswordRequirementHints(password: String, p: AccountPalette) {
+    val longEnough = password.length >= 8
+    val containsNumberOrSymbol = AccountValidation.containsNumberOrSymbol(password)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (p.card == Color.White) Color(0xFFF6F8F9) else p.border.copy(alpha = 0.15f))
+            .border(1.dp, p.border.copy(alpha = 0.42f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 11.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PasswordRequirementRow("At least 8 characters long", longEnough, p)
+        PasswordRequirementRow("Contains at least one number or symbol", containsNumberOrSymbol, p)
+    }
+}
+
+@Composable
+private fun PasswordRequirementRow(label: String, satisfied: Boolean, p: AccountPalette) {
+    val fg = if (satisfied) Teal else p.secondary
+    val circleColor = if (satisfied) Color(0xFFE0F5F3) else Color(0xFFE8EDF2)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(18.dp).clip(CircleShape).background(circleColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.pg_icon_check),
+                contentDescription = if (satisfied) "Requirement met" else "Requirement not met",
+                tint = if (satisfied) Teal else Color(0xFF94A3B8),
+                modifier = Modifier.size(12.dp)
+            )
+        }
+        Spacer(Modifier.width(9.dp))
+        Text(label, color = fg, fontSize = 12.sp, lineHeight = 17.sp)
+    }
+}
+
+@Composable
+private fun TermsAgreementRow(checked: Boolean, onChecked: (Boolean) -> Unit, p: AccountPalette) {
+    val label = buildAnnotatedString {
+        append("I agree to the ")
+        withStyle(SpanStyle(color = Teal, textDecoration = TextDecoration.Underline)) {
+            append("Terms of Service & Privacy Policy")
+        }
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onChecked,
+            colors = CheckboxDefaults.colors(checkedColor = Teal)
+        )
+        Text(
+            text = label,
+            modifier = Modifier.clickable { onChecked(!checked) },
+            color = p.secondary,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
+        )
     }
 }
 
@@ -424,16 +542,27 @@ fun ForgotPasswordScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     AccountPage(isDark) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            SmallLink("‹ Back", onBackToLogin)
-            Spacer(Modifier.weight(1f))
-            Text("P U L I H G O", color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(.25f))
+        Box(Modifier.fillMaxWidth().height(52.dp)) {
+            Box(
+                Modifier.align(Alignment.CenterStart).size(48.dp).clip(CircleShape)
+                    .background(p.card).border(1.dp, p.border.copy(alpha = .7f), CircleShape)
+                    .clickable(onClick = onBackToLogin),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(painterResource(R.drawable.pg_icon_back), contentDescription = "Back to Login",
+                    tint = p.text, modifier = Modifier.size(24.dp))
+            }
+            Text("P U L I H G O", color = p.text, fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp,
+                modifier = Modifier.align(Alignment.Center))
         }
         Spacer(Modifier.height(112.dp))
         CardSurface(isDark) {
             Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFE6F3F3)),
-                contentAlignment = Alignment.Center) { Text("⌑", fontSize = 30.sp, color = Teal) }
+                contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.pg_icon_lock), contentDescription = null,
+                    tint = Teal, modifier = Modifier.size(32.dp))
+            }
             Spacer(Modifier.height(20.dp))
             HeaderText("Forgot Password?",
                 "Enter your registered email address and we'll send you instructions to reset your password.", p)
@@ -462,7 +591,10 @@ fun ResetLinkSentScreen(email: String, isDark: Boolean = false, onBackToLogin: (
         Spacer(Modifier.height(116.dp))
         CardSurface(isDark) {
             Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFE6F3F3)),
-                contentAlignment = Alignment.Center) { Text("➤", fontSize = 27.sp, color = Teal) }
+                contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.pg_icon_send), contentDescription = null,
+                    tint = Teal, modifier = Modifier.size(34.dp))
+            }
             Spacer(Modifier.height(16.dp))
             HeaderText("Reset Link Sent",
                 "If an account exists for this email, reset instructions would be sent to:", p)
@@ -470,10 +602,18 @@ fun ResetLinkSentScreen(email: String, isDark: Boolean = false, onBackToLogin: (
             Text(email, color = p.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                 textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
-            Text("✓ Demo preview only — no email has been sent. Your account data remains unchanged.",
+            Row(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFEAF7F1)).padding(14.dp),
-                fontSize = 12.sp, lineHeight = 18.sp, color = Color(0xFF176C52))
+                    .background(Color(0xFFF4F9F8)).border(1.dp, Color(0xFFD7E9E8), RoundedCornerShape(12.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(painterResource(R.drawable.pg_icon_info), contentDescription = null,
+                    tint = Teal, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("Demo preview only — no email has been sent. Your account data remains unchanged.",
+                    fontSize = 12.sp, lineHeight = 18.sp, color = p.secondary)
+            }
             Spacer(Modifier.height(24.dp))
             PrimaryAction("Back to Login", onBackToLogin)
             Spacer(Modifier.height(8.dp))
@@ -519,7 +659,7 @@ fun SettingsScreen(
                 )
             }
             Text(
-                "Settings", color = p.text, fontSize = 22.sp,
+                "Settings", color = p.text, fontSize = 24.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center)
             )
         }
@@ -685,7 +825,7 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(18.dp))
         Text("PulihGo Patient App • v1.4.2", color = p.secondary.copy(alpha = .65f),
-            fontSize = 11.sp, textAlign = TextAlign.Center)
+            fontSize = 12.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
     }
 
