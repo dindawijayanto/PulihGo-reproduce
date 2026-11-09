@@ -1,0 +1,30 @@
+
+{
+  "exercises": [
+    {
+      "id": "EX001",
+      "name": "Forearm Supination and Pronation",
+      "bodyPart": "FOREARM",
+      "movementTypes": [
+        "SUPINATION",
+        "PRONATION"
+      ],
+      "description": "Exercise for forearm rotation rehabilitation.",
+      "defaultTargetRomDeg": 70.0,
+      "defaultTargetReps": 10,
+      "defaultRomCeilingDeg": 80.0,
+      "requiresPhoneSensor": true,
+      "instructions": [
+        "Keep your elbow close to your body.",
+        "Rotate your forearm until your palm faces upward (supination).",
+        "Rotate your forearm back until your palm faces downward (pronation).",
+        "Perform the movement slowly and carefully."
+      ],
+      "safetyNotes": [
+        "Do not force movement beyond the prescribed range.",
+        "Stop the exercise if pain occurs.",
+        "Keep the elbow in a stable position."
+      ]
+    }
+  ]
+}

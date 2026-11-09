@@ -1,0 +1,22 @@
+{
+  "patients": [
+    {
+      "id": "P001",
+      "userId": "U002",
+      "therapistId": "U001",
+      "age": 24,
+      "affectedArm": "RIGHT",
+      "rehabilitationGoal": "Forearm supination and pronation",
+      "notes": "Demo patient for application testing"
+    },
+    {
+      "id": "P002",
+      "userId": "U003",
+      "therapistId": "U001",
+      "age": 31,
+      "affectedArm": "LEFT",
+      "rehabilitationGoal": "Forearm supination and pronation",
+      "notes": "Demo patient for application testing"
+    }
+  ]
+}
