@@ -47,19 +47,13 @@ import com.pulihgo.app.sensor.SensorHealth
 import com.pulihgo.app.sensor.SensorSource
 import java.util.Locale
 
-/** Sumbu utama untuk Forearm Supination/Pronation (EX001), sama dengan repo asli. */
 private val EXERCISE_AXIS = Axis.ROLL
 
-/**
- * PGF-SEN-01 + PGF-SEN-02: cek sensor dan kalibrasi posisi awal.
- * Layar ini juga berfungsi sebagai alat uji di perangkat untuk PGF-INT-04.
- */
 @Composable
 fun SensorCheckScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Offset disimpan agar kalibrasi tidak hilang saat layar diputar.
     var savedOffset by rememberSaveable { mutableStateOf<DoubleArray?>(null) }
 
     val controller = remember {
@@ -73,7 +67,6 @@ fun SensorCheckScreen(onBack: () -> Unit) {
             ),
         )
     }
-    // Sensor hanya aktif saat layar terlihat; listener dilepas saat aplikasi ke background.
     LaunchedEffect(controller, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { controller.run() }
     }

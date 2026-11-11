@@ -13,7 +13,6 @@ import org.junit.Test
 import java.io.File
 
 class MockDataParserTest {
-    // Unit test berjalan dengan working directory = modul app/, jadi file aset asli bisa dibaca langsung.
     private fun asset(name: String) = File("src/main/assets/mock_data/$name").readText()
 
     @Test fun seededUsersParseWithRoles() {
@@ -73,7 +72,6 @@ class AuthRepositoryTest {
 }
 
 class RoleRouterTest {
-
     @Test fun loginLandsOnRoleHome() {
         assertEquals(AppRoute.PATIENT_HOME, RoleRouter.homeFor(Role.PATIENT))
         assertEquals(AppRoute.THERAPIST_HOME, RoleRouter.homeFor(Role.THERAPIST))

@@ -24,12 +24,6 @@ private val BackStackSaver = listSaver<List<AppRoute>, String>(
     restore = { names -> names.map { AppRoute.valueOf(it) } },
 )
 
-/**
- * Root navigasi aplikasi (PGF-ALL-04).
- *
- * Setiap perpindahan layar melewati [RoleRouter.resolve], jadi tidak ada layar
- * yang bisa dibuka oleh role yang salah, termasuk jika dipanggil dari tombol yang keliru.
- */
 @Composable
 fun AppNavigation() {
     val context = LocalContext.current
@@ -60,7 +54,6 @@ fun AppNavigation() {
 
     BackHandler(enabled = backStack.size > 1) { backStack = backStack.dropLast(1) }
 
-    // Jaga-jaga: jika state dipulihkan dengan route yang tidak sesuai role, arahkan ulang.
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
 
@@ -73,7 +66,6 @@ fun AppNavigation() {
                     is LoginResult.Success -> {
                         sessionStore.currentUserId = result.user.id
                         currentUser = result.user
-                        // Login mengganti seluruh back stack, jadi tombol Back tidak kembali ke Login.
                         resetTo(RoleRouter.homeFor(result.user.role))
                         null
                     }

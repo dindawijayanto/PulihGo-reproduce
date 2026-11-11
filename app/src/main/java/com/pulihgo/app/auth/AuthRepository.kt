@@ -3,23 +3,12 @@ package com.pulihgo.app.auth
 import android.content.Context
 import com.pulihgo.app.data.model.User
 
-/** Hasil percobaan login. Pesan error ditampilkan apa adanya di layar login. */
 sealed interface LoginResult {
     data class Success(val user: User) : LoginResult
     data class Failure(val message: String) : LoginResult
 }
 
-/**
- * Demo authentication berdasarkan role (PGF-ALL-04).
- *
- * - Sumber akun: assets/mock_data/users.json (PGF-ALL-03).
- * - Identifier boleh berupa username ATAU email (case-insensitive), sehingga
- *   LoginScreen Orie yang berbasis email tetap bisa memakai repository ini.
- * - Password dibandingkan apa adanya (case-sensitive).
- * - Ini BUKAN autentikasi produksi: tidak ada hashing dan tidak ada token.
- */
 class AuthRepository(private val users: List<User>) {
-
     fun login(identifier: String, password: String): LoginResult {
         val key = identifier.trim().lowercase()
         if (key.isEmpty() || password.isEmpty()) {
@@ -34,17 +23,11 @@ class AuthRepository(private val users: List<User>) {
         }
     }
 
-    /** Dipakai untuk memulihkan sesi login dari [SessionStore] saat aplikasi dibuka ulang. */
     fun findActiveUser(userId: String): User? = users.firstOrNull { it.id == userId && it.isActive }
 
-    /** Akun demo yang ditampilkan sebagai petunjuk di layar login. */
     fun demoAccounts(): List<User> = users.filter { it.isActive }
 }
 
-/**
- * Menyimpan HANYA id user yang sedang login (bukan password) supaya aplikasi
- * langsung membuka Home sesuai role setelah ditutup lalu dibuka lagi.
- */
 class SessionStore(context: Context) {
     private val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
 

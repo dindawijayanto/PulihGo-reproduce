@@ -1,31 +1,19 @@
 package com.pulihgo.app.sensor
 
-/** Kondisi pembacaan sensor yang ditampilkan ke pengguna (PGF-SEN-01). */
 sealed interface SensorHealth {
-    /** Ponsel tidak punya rotation vector maupun accelerometer. Latihan tidak bisa dilakukan. */
     data object Unavailable : SensorHealth
 
-    /** Sensor ada, tapi gagal didaftarkan (misalnya dibatasi sistem). */
     data object RegistrationFailed : SensorHealth
 
-    /** Sudah terdaftar, menunggu sampel pertama (masih dalam batas waktu startup). */
     data object WaitingFirstSample : SensorHealth
 
-    /** Melewati batas waktu startup tanpa satu pun sampel. */
     data object NoData : SensorHealth
 
-    /** Sampel pernah masuk lalu berhenti lebih lama dari batas stall. */
     data class Stalled(val millisSinceLastSample: Long) : SensorHealth
 
-    /** Data mengalir normal. */
     data class Streaming(val sampleRateHz: Double) : SensorHealth
 }
 
-/**
- * Logika murni untuk menilai apakah sensor benar-benar mengirim data.
- * Semua waktu dalam milidetik dari jam monotonic (`SystemClock.elapsedRealtime()`),
- * diberikan oleh pemanggil sehingga mudah diuji.
- */
 class SensorHealthMonitor(
     private val startupTimeoutMs: Long = 2_000,
     private val stallTimeoutMs: Long = 1_000,
@@ -63,7 +51,6 @@ class SensorHealthMonitor(
         return SensorHealth.Streaming(sampleRateHz())
     }
 
-    /** Rata-rata frekuensi sampel di jendela terakhir. Bernilai 0 jika sampel belum cukup. */
     fun sampleRateHz(): Double {
         if (sampleTimes.size < 2) return 0.0
         val spanMs = sampleTimes.last() - sampleTimes.first()

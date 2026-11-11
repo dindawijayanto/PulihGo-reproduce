@@ -11,7 +11,6 @@ import kotlin.math.sin
 class OrientationMathTest {
     private val eps = 1e-3
 
-    /** Quaternion rotasi [deg] mengelilingi sumbu Y perangkat (sumbu roll Android). */
     private fun rollQuaternion(deg: Double, includeW: Boolean = true): FloatArray {
         val half = Math.toRadians(deg) / 2
         return if (includeW) floatArrayOf(0f, sin(half).toFloat(), 0f, cos(half).toFloat())
@@ -31,14 +30,13 @@ class OrientationMathTest {
     }
 
     @Test fun missingWComponentIsReconstructed() {
-        // Beberapa perangkat hanya mengirim 3 nilai rotation vector.
         assertEquals(30.0, OrientationMath.fromRotationVector(rollQuaternion(30.0, includeW = false)).roll, eps)
     }
 
     @Test fun rotationAboutXIsPitch() {
         val half = Math.toRadians(-20.0) / 2
         val a = OrientationMath.fromRotationVector(floatArrayOf(sin(half).toFloat(), 0f, 0f, cos(half).toFloat()))
-        assertEquals(20.0, a.pitch, eps) // konvensi getOrientation: pitch = asin(-R[7])
+        assertEquals(20.0, a.pitch, eps)
         assertEquals(0.0, a.roll, eps)
     }
 
@@ -56,7 +54,6 @@ class OrientationMathTest {
 }
 
 class SensorHealthMonitorTest {
-
     @Test fun waitingThenNoDataAfterStartupTimeout() {
         val m = SensorHealthMonitor(startupTimeoutMs = 2000, stallTimeoutMs = 1000)
         m.onStarted(0)
@@ -67,7 +64,7 @@ class SensorHealthMonitorTest {
     @Test fun streamingReportsSampleRate() {
         val m = SensorHealthMonitor()
         m.onStarted(0)
-        for (t in 0L..1000L step 20) m.onSample(t) // 50 Hz
+        for (t in 0L..1000L step 20) m.onSample(t)
         val h = m.evaluate(1010)
         assertTrue(h is SensorHealth.Streaming)
         assertEquals(50.0, (h as SensorHealth.Streaming).sampleRateHz, 0.5)
@@ -89,7 +86,6 @@ class SensorHealthMonitorTest {
 }
 
 class CalibratedAngleControllerTest {
-
     private fun controller(source: SensorSource? = SensorSource.GAME_ROTATION_VECTOR) = CalibratedAngleController(
         source = source,
         updates = { emptyFlow() },
@@ -110,7 +106,7 @@ class CalibratedAngleControllerTest {
         c.calibrate()
         repeat(3) { c.handle(reading(-170.0, 20L * (it + 1))) }
         assertTrue(c.state.value.calibration is CalibrationState.Calibrated)
-        c.handle(reading(160.0, 100)) // berputar -30° melewati batas ±180°
+        c.handle(reading(160.0, 100))
         assertEquals(-30.0, c.state.value.calibrated!!.roll, 1e-6)
         assertEquals(160.0, c.state.value.raw!!.roll, 1e-6)
     }

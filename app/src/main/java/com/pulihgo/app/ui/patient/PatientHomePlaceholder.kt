@@ -16,11 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
-/**
- * Tujuan login untuk role PATIENT. Ini placeholder; saat integrasi, ganti dengan
- * `PatientHomeScreen` milik Orie (branch feature/orie-ui) di AppNavigation.
- * Nama sengaja dibedakan supaya tidak bentrok ketika branch di-merge.
- */
 @Composable
 fun PatientHomePlaceholder(
     patientName: String,

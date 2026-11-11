@@ -16,7 +16,7 @@ class AngleNormalizerTest {
     }
 
     @Test fun wrapMapsBoundaryAndOverflowIntoMinus180To180() {
-        assertEquals(180.0, AngleNormalizer.wrapDeg180(-180.0), eps) // (-180, 180]: -180 menjadi 180
+        assertEquals(180.0, AngleNormalizer.wrapDeg180(-180.0), eps)
         assertEquals(-170.0, AngleNormalizer.wrapDeg180(190.0), eps)
         assertEquals(170.0, AngleNormalizer.wrapDeg180(-190.0), eps)
         assertEquals(-20.0, AngleNormalizer.wrapDeg180(340.0), eps)
@@ -26,13 +26,10 @@ class AngleNormalizerTest {
     }
 
     @Test fun relativeAngleTakesShortWayAcrossPlusMinus180() {
-        // Posisi netral di roll mentah -170. Pasien berputar -30° sehingga sensor membaca 160 (sudah ter-wrap).
         val offset = Angles(0.0, -170.0, 0.0)
         val rel = AngleNormalizer.relative(Angles(0.0, 160.0, 0.0), offset)
-        assertEquals(-30.0, rel.roll, eps) // bukan 330
-        // Berputar +30° dari -170 menjadi -140
+        assertEquals(-30.0, rel.roll, eps)
         assertEquals(30.0, AngleNormalizer.relative(Angles(0.0, -140.0, 0.0), offset).roll, eps)
-        // Kasus dari repo asli: raw 170, offset -170 menjadi -20
         assertEquals(-20.0, AngleNormalizer.relative(Angles(0.0, 170.0, 0.0), offset).roll, eps)
     }
 
@@ -63,7 +60,6 @@ class AngleCalibratorTest {
         assertEquals(0.0, rel.pitch, eps)
         assertEquals(0.0, rel.roll, eps)
         assertEquals(0.0, rel.yaw, eps)
-        // Supinasi 60°: roll bertambah 60°
         assertEquals(60.0, c.relative(Angles(12.0, 93.0, -90.0)).roll, eps)
     }
 
@@ -72,7 +68,6 @@ class AngleCalibratorTest {
         c.start()
         feed(c, listOf(179.0, -179.0, 178.0, -178.0).map { Angles(0.0, it, 0.0) })
         assertEquals(180.0, c.offset!!.roll, eps)
-        // Diam di posisi awal, sudut relatif sekitar 0, tidak lompat ke ±358
         assertEquals(-1.0, c.relative(Angles(0.0, 179.0, 0.0)).roll, eps)
         assertEquals(1.0, c.relative(Angles(0.0, -179.0, 0.0)).roll, eps)
     }
@@ -91,7 +86,6 @@ class AngleCalibratorTest {
         feed(c, List(3) { Angles(0.0, 50.0, 0.0) })
         c.start()
         feed(c, listOf(0.0, 40.0, 80.0).map { Angles(0.0, it, 0.0) })
-        // Gagal, tapi angka tetap konsisten memakai offset lama (50°)
         assertEquals(10.0, c.relative(Angles(0.0, 60.0, 0.0)).roll, eps)
     }
 
@@ -105,7 +99,6 @@ class AngleCalibratorTest {
     @Test fun samplesIgnoredUnlessCalibrationStarted() {
         val c = AngleCalibrator(requiredSamples = 1)
         assertEquals(CalibrationState.NotCalibrated, c.onSample(Angles(0.0, 30.0, 0.0)))
-        // Belum kalibrasi: nilai mentah hanya dinormalisasi
         assertEquals(-170.0, c.relative(Angles(0.0, 190.0, 0.0)).roll, eps)
     }
 

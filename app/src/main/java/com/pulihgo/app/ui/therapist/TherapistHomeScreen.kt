@@ -20,11 +20,6 @@ import androidx.compose.ui.unit.dp
 import com.pulihgo.app.data.model.Patient
 import com.pulihgo.app.data.model.User
 
-/**
- * Tujuan login untuk role THERAPIST. Menampilkan pasien yang `therapistId`-nya
- * sama dengan therapist yang login, sebagai bukti data sudah terikat ke role.
- * Dashboard lengkap dikerjakan di PGF-THR-02.
- */
 @Composable
 fun TherapistHomeScreen(
     therapist: User?,

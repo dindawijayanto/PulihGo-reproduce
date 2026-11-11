@@ -35,10 +35,6 @@ import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.theme.PulihGoTheme
 
-/**
- * Login demo berbasis role. [onLogin] mengembalikan pesan error, atau null jika berhasil.
- * Layar ini tidak tahu apa pun tentang role. Pengalihan ke Home ditangani AppNavigation.
- */
 @Composable
 fun RoleLoginScreen(
     demoAccounts: List<User>,

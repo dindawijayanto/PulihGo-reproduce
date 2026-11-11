@@ -4,10 +4,8 @@ import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
-/** Sumbu rotasi ponsel. Latihan supinasi/pronasi memakai [ROLL] (sama seperti repo asli). */
 enum class Axis { PITCH, ROLL, YAW }
 
-/** Orientasi dalam DERAJAT. */
 data class Angles(val pitch: Double, val roll: Double, val yaw: Double) {
     operator fun get(axis: Axis): Double = when (axis) {
         Axis.PITCH -> pitch
@@ -20,22 +18,9 @@ data class Angles(val pitch: Double, val roll: Double, val yaw: Double) {
     }
 }
 
-/**
- * Konversi data sensor mentah menjadi pitch/roll/yaw.
- *
- * Konvensinya mengikuti `SensorManager.getOrientation()` Android:
- *   yaw (azimuth) = atan2(R[1], R[4]), pitch = asin(-R[7]), roll = atan2(-R[6], R[8])
- * Rumusnya ditulis ulang dalam Kotlin murni supaya bisa diuji tanpa perangkat atau emulator.
- */
 object OrientationMath {
-
     private const val RAD_TO_DEG = 180.0 / Math.PI
 
-    /**
-     * Rotation vector (TYPE_GAME_ROTATION_VECTOR / TYPE_ROTATION_VECTOR) menjadi sudut.
-     * values = [x, y, z, (w)]; jika w tidak ada, dihitung dari panjang vektor
-     * (sama seperti `SensorManager.getRotationMatrixFromVector`).
-     */
     fun fromRotationVector(values: FloatArray): Angles {
         require(values.size >= 3) { "Rotation vector needs at least 3 values" }
         val x = values[0].toDouble()
@@ -60,20 +45,13 @@ object OrientationMath {
         )
     }
 
-    /**
-     * Fallback untuk perangkat tanpa rotation vector: hanya accelerometer (vektor gravitasi).
-     * Baris ketiga matriks rotasi = gravitasi yang dinormalisasi, sehingga
-     *   pitch = asin(-gy/|g|), roll = atan2(-gx, gz).
-     * Yaw tidak bisa diketahui dari gravitasi, jadi diisi 0. Hasil ini juga lebih
-     * berisik saat bergerak, sehingga UI menandainya sebagai mode terbatas.
-     */
     fun fromGravity(values: FloatArray): Angles? {
         require(values.size >= 3) { "Accelerometer needs 3 values" }
         val gx = values[0].toDouble()
         val gy = values[1].toDouble()
         val gz = values[2].toDouble()
         val norm = sqrt(gx * gx + gy * gy + gz * gz)
-        if (norm < 1e-3) return null // free fall atau data rusak, tidak bisa menentukan arah
+        if (norm < 1e-3) return null
         return Angles(
             pitch = asin((-gy / norm).coerceIn(-1.0, 1.0)) * RAD_TO_DEG,
             roll = atan2(-gx, gz) * RAD_TO_DEG,

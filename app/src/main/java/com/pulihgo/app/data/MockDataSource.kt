@@ -6,12 +6,7 @@ import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 import org.json.JSONObject
 
-/**
- * Membaca seeded dummy data (PGF-ALL-03) dari `app/src/main/assets/mock_data/`.
- * File harus berada di folder assets supaya ikut ter-package ke dalam APK.
- */
 class MockDataSource(private val context: Context) {
-
     fun loadUsers(): List<User> = MockDataParser.parseUsers(readAsset("mock_data/users.json"))
 
     fun loadPatients(): List<Patient> = MockDataParser.parsePatients(readAsset("mock_data/patients.json"))
@@ -20,10 +15,7 @@ class MockDataSource(private val context: Context) {
         context.assets.open(path).bufferedReader(Charsets.UTF_8).use { it.readText() }
 }
 
-/** Parser murni (tanpa Context) supaya bisa diuji dengan unit test JVM. */
 object MockDataParser {
-
-    /** Entri dengan role yang tidak dikenal dilewati, tidak membuat aplikasi crash. */
     fun parseUsers(json: String): List<User> {
         val array = JSONObject(json).getJSONArray("users")
         return (0 until array.length()).mapNotNull { index ->
