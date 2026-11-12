@@ -36,6 +36,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.pulihgo.app.detection.Repetition
+import com.pulihgo.app.detection.RepetitionDetector
 import com.pulihgo.app.sensor.AngleCalibrator
 import com.pulihgo.app.sensor.Angles
 import com.pulihgo.app.sensor.Axis
@@ -67,6 +69,16 @@ fun SensorCheckScreen(onBack: () -> Unit) {
             ),
         )
     }
+
+    val detector = remember {
+        RepetitionDetector(targetRomDeg = 70.0)
+    }
+
+    var repCount by remember { mutableStateOf(0) }
+    var lastRepetition by remember {
+        mutableStateOf<Repetition?>(null)
+    }
+
     LaunchedEffect(controller, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { controller.run() }
     }
@@ -76,6 +88,38 @@ fun SensorCheckScreen(onBack: () -> Unit) {
         val offset = (state.calibration as? CalibrationState.Calibrated)?.offset
         if (offset != null) savedOffset = doubleArrayOf(offset.pitch, offset.roll, offset.yaw)
         if (state.calibration is CalibrationState.NotCalibrated) savedOffset = null
+    }
+
+    LaunchedEffect(controller) {
+        controller.samples.collect{ sample ->
+            val currentState = controller.state.value
+
+            if (
+                currentState.calibration is CalibrationState.Calibrated &&
+                currentState.health is SensorHealth.Streaming
+            ) {
+                val angle = sample.angle(EXERCISE_AXIS)
+
+                val repetition = detector.processAngle(
+                    angleDeg = angle,
+                    timestampMs = sample.elapsedMs,
+                )
+
+                repCount = detector.count
+
+                if (repetition != null) {
+                    lastRepetition = repetition
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(state.calibration) {
+        if (state.calibration !is CalibrationState.Calibrated){
+            detector.reset()
+            repCount = 0
+            lastRepetition = null
+        }
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -99,7 +143,10 @@ fun SensorCheckScreen(onBack: () -> Unit) {
                 onCalibrate = controller::calibrate,
                 onReset = controller::resetCalibration,
             )
-
+            RepetitionCard(
+                count = repCount,
+                lastRepetition = lastRepetition,
+            )
             AnglesCard("Sudut terkalibrasi (relatif ke posisi awal)", state.calibrated, highlight = EXERCISE_AXIS)
             AnglesCard("Sudut mentah dari sensor", state.raw, highlight = null)
         }
@@ -235,6 +282,43 @@ private fun AnglesCard(title: String, angles: Angles?, highlight: Axis?) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepetitionCard(
+    count: Int,
+    lastRepetition: Repetition?,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Deteksi Repetisi",
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            Text(
+                "Jumlah repetisi: $count",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+
+            if (lastRepetition != null) {
+                Text("Peak ROM: %.1f°".format(lastRepetition.peakRomDeg))
+                Text("Durasi: ${lastRepetition.durationMs} ms")
+                Text(
+                    "Jumlah sampel: ${lastRepetition.samples.size}"
+                )
+            } else {
+                Text(
+                    "Lakukan gerakan melewati threshold, " +
+                            "kemudian kembali ke posisi awal."
+                )
             }
         }
     }
