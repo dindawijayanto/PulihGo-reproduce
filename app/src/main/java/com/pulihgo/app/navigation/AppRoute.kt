@@ -2,14 +2,20 @@ package com.pulihgo.app.navigation
 
 import com.pulihgo.app.data.model.Role
 
+/** All account/onboarding screens are public; data screens are role-guarded. */
 enum class AppRoute(val allowedRoles: Set<Role>) {
+    ONBOARDING(emptySet()),
     LOGIN(emptySet()),
+    REGISTER(emptySet()),
+    FORGOT(emptySet()),
+    LINK_SENT(emptySet()),
 
     PATIENT_HOME(setOf(Role.PATIENT)),
+    PATIENT_SETTINGS(setOf(Role.PATIENT)),
+    PATIENT_SUMMARY_DEMO(setOf(Role.PATIENT)),
     PATIENT_EXERCISES(setOf(Role.PATIENT)),
     PATIENT_EXERCISE_PREPARATION(setOf(Role.PATIENT)),
     SENSOR_CHECK(setOf(Role.PATIENT)),
-
     THERAPIST_HOME(setOf(Role.THERAPIST));
 
     val isPublic: Boolean get() = allowedRoles.isEmpty()

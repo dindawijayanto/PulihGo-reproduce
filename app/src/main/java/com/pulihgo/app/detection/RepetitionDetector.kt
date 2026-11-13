@@ -112,5 +112,3 @@ class RepetitionDetector(targetRomDeg: Double? = null,) {
         repCounter = 0
     }
 }
-
-

@@ -1,6 +1,7 @@
 package com.pulihgo.app.auth
 
 import android.content.Context
+import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 
 sealed interface LoginResult {
@@ -8,13 +9,23 @@ sealed interface LoginResult {
     data class Failure(val message: String) : LoginResult
 }
 
+/**
+ * Shared role-based demo authentication.
+ * Registered Patient accounts are in-memory only, as in Orie's existing UI demo.
+ * Do NOT treat this as production user management or persistent registration.
+ */
 class AuthRepository(private val users: List<User>) {
+    private val registeredPatients = mutableListOf<User>()
+    private val allUsers: List<User> get() = users + registeredPatients
+
     fun login(identifier: String, password: String): LoginResult {
         val key = identifier.trim().lowercase()
         if (key.isEmpty() || password.isEmpty()) {
             return LoginResult.Failure("Username/email dan password wajib diisi.")
         }
-        val user = users.firstOrNull { it.username.lowercase() == key || it.email.lowercase() == key }
+        val user = allUsers.firstOrNull {
+            it.username.lowercase() == key || it.email.lowercase() == key
+        }
         return when {
             user == null || user.password != password ->
                 LoginResult.Failure("Username/email atau password salah.")
@@ -23,9 +34,27 @@ class AuthRepository(private val users: List<User>) {
         }
     }
 
-    fun findActiveUser(userId: String): User? = users.firstOrNull { it.id == userId && it.isActive }
+    fun registerDemoPatient(name: String, email: String, password: String): Boolean {
+        val normalizedEmail = email.trim().lowercase()
+        if (normalizedEmail.isEmpty() || allUsers.any { it.email.equals(normalizedEmail, ignoreCase = true) }) {
+            return false
+        }
+        val index = registeredPatients.size + 1
+        registeredPatients += User(
+            id = "U_LOCAL_$index",
+            username = "demo_registered_$index",
+            password = password,
+            role = Role.PATIENT,
+            fullName = name.trim(),
+            email = normalizedEmail,
+            isActive = true,
+        )
+        return true
+    }
 
-    fun demoAccounts(): List<User> = users.filter { it.isActive }
+    fun findActiveUser(userId: String): User? = allUsers.firstOrNull { it.id == userId && it.isActive }
+
+    fun demoAccounts(): List<User> = allUsers.filter { it.isActive }
 }
 
 class SessionStore(context: Context) {
