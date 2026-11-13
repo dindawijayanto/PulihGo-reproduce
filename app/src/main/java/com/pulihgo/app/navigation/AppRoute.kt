@@ -6,6 +6,8 @@ enum class AppRoute(val allowedRoles: Set<Role>) {
     LOGIN(emptySet()),
 
     PATIENT_HOME(setOf(Role.PATIENT)),
+    PATIENT_EXERCISES(setOf(Role.PATIENT)),
+    PATIENT_EXERCISE_PREPARATION(setOf(Role.PATIENT)),
     SENSOR_CHECK(setOf(Role.PATIENT)),
 
     THERAPIST_HOME(setOf(Role.THERAPIST));

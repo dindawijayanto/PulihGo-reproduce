@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 fun PatientHomePlaceholder(
     patientName: String,
     onOpenSensorCheck: () -> Unit,
+    onOpenExerciseLibrary: () -> Unit,
     onLogout: () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -33,7 +34,10 @@ fun PatientHomePlaceholder(
                 "Sebelum latihan, pastikan sensor ponsel terbaca dan lakukan kalibrasi posisi awal.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = onOpenSensorCheck, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onOpenExerciseLibrary, modifier = Modifier.fillMaxWidth()) {
+                Text("Pilih Latihan")
+            }
+            OutlinedButton(onClick = onOpenSensorCheck, modifier = Modifier.fillMaxWidth()) {
                 Text("Cek Sensor & Kalibrasi")
             }
             OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Keluar") }
