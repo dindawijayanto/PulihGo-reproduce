@@ -38,6 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.pulihgo.app.detection.Repetition
 import com.pulihgo.app.detection.RepetitionDetector
+import com.pulihgo.app.quality.SessionSmoothnessTracker
+import com.pulihgo.app.quality.SmoothnessScore
 import com.pulihgo.app.sensor.AngleCalibrator
 import com.pulihgo.app.sensor.Angles
 import com.pulihgo.app.sensor.Axis
@@ -78,6 +80,9 @@ fun SensorCheckScreen(onBack: () -> Unit) {
     var lastRepetition by remember {
         mutableStateOf<Repetition?>(null)
     }
+    val smoothnessTracker = remember { SessionSmoothnessTracker() }
+    var lastSmoothness by remember { mutableStateOf<SmoothnessScore?>(null) }
+    var averageSmoothness by remember { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(controller, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { controller.run() }
@@ -109,6 +114,8 @@ fun SensorCheckScreen(onBack: () -> Unit) {
 
                 if (repetition != null) {
                     lastRepetition = repetition
+                    lastSmoothness = smoothnessTracker.record(repetition)
+                    averageSmoothness = smoothnessTracker.snapshot().averageScore
                 }
             }
         }
@@ -119,6 +126,9 @@ fun SensorCheckScreen(onBack: () -> Unit) {
             detector.reset()
             repCount = 0
             lastRepetition = null
+            smoothnessTracker.reset()
+            lastSmoothness = null
+            averageSmoothness = null
         }
     }
 
@@ -146,6 +156,8 @@ fun SensorCheckScreen(onBack: () -> Unit) {
             RepetitionCard(
                 count = repCount,
                 lastRepetition = lastRepetition,
+                lastSmoothness = lastSmoothness,
+                averageSmoothness = averageSmoothness,
             )
             AnglesCard("Sudut terkalibrasi (relatif ke posisi awal)", state.calibrated, highlight = EXERCISE_AXIS)
             AnglesCard("Sudut mentah dari sensor", state.raw, highlight = null)
@@ -291,6 +303,8 @@ private fun AnglesCard(title: String, angles: Angles?, highlight: Axis?) {
 private fun RepetitionCard(
     count: Int,
     lastRepetition: Repetition?,
+    lastSmoothness: SmoothnessScore?,
+    averageSmoothness: Double?,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(
@@ -314,6 +328,12 @@ private fun RepetitionCard(
                 Text(
                     "Jumlah sampel: ${lastRepetition.samples.size}"
                 )
+                val perRep = lastSmoothness?.value?.let { String.format(Locale.US, "%.2f / 1.00", it) }
+                    ?: "Belum dapat dihitung"
+                val sessionMean = averageSmoothness?.let { String.format(Locale.US, "%.2f / 1.00", it) }
+                    ?: "Belum tersedia"
+                Text("Smoothness repetisi: $perRep")
+                Text("Rata-rata smoothness sesi: $sessionMean")
             } else {
                 Text(
                     "Lakukan gerakan melewati threshold, " +
