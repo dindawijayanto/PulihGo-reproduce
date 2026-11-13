@@ -13,9 +13,12 @@ import com.pulihgo.app.auth.AuthRepository
 import com.pulihgo.app.auth.LoginResult
 import com.pulihgo.app.auth.SessionStore
 import com.pulihgo.app.data.MockDataSource
+import com.pulihgo.app.data.exercise.ExerciseCatalog
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.auth.RoleLoginScreen
 import com.pulihgo.app.ui.patient.PatientHomePlaceholder
+import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
+import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.SensorCheckScreen
 import com.pulihgo.app.ui.therapist.TherapistHomeScreen
 
@@ -30,6 +33,10 @@ fun AppNavigation() {
     val dataSource = remember { MockDataSource(context.applicationContext) }
     val auth = remember { AuthRepository(dataSource.loadUsers()) }
     val sessionStore = remember { SessionStore(context.applicationContext) }
+    val exercises = remember {
+        runCatching { ExerciseCatalog(context.applicationContext).loadExercises() }.getOrDefault(emptyList())
+    }
+    var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
 
     var currentUser by remember {
         mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser))
@@ -76,8 +83,36 @@ fun AppNavigation() {
         AppRoute.PATIENT_HOME -> PatientHomePlaceholder(
             patientName = user?.fullName.orEmpty(),
             onOpenSensorCheck = { navigate(AppRoute.SENSOR_CHECK) },
+            onOpenExerciseLibrary = { navigate(AppRoute.PATIENT_EXERCISES) },
             onLogout = ::logout,
         )
+
+        AppRoute.PATIENT_EXERCISES -> PatientExerciseLibraryScreen(
+            exercises = exercises,
+            onSelectExercise = { exercise ->
+                selectedExerciseId = exercise.id
+                navigate(AppRoute.PATIENT_EXERCISE_PREPARATION)
+            },
+            onBack = { backStack = backStack.dropLast(1) },
+        )
+
+        AppRoute.PATIENT_EXERCISE_PREPARATION -> {
+            val exercise = exercises.firstOrNull { it.id == selectedExerciseId }
+            if (exercise != null) {
+                PatientExercisePreparationScreen(
+                    exercise = exercise,
+                    onBack = { backStack = backStack.dropLast(1) },
+                    onContinueToCalibration = { navigate(AppRoute.SENSOR_CHECK) },
+                )
+            } else {
+                // Restore safely if the saved exercise no longer exists in the catalog.
+                PatientExerciseLibraryScreen(
+                    exercises = exercises,
+                    onSelectExercise = { selected -> selectedExerciseId = selected.id },
+                    onBack = { backStack = backStack.dropLast(1) },
+                )
+            }
+        }
 
         AppRoute.SENSOR_CHECK -> SensorCheckScreen(onBack = { backStack = backStack.dropLast(1) })
 
