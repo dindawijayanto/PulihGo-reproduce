@@ -41,6 +41,10 @@ import com.pulihgo.app.detection.RepetitionDetector
 import com.pulihgo.app.quality.SessionSmoothnessTracker
 import com.pulihgo.app.quality.SmoothnessScore
 import com.pulihgo.app.sensor.AngleCalibrator
+import com.pulihgo.app.quality.RomSafetyConfig
+import com.pulihgo.app.quality.RomSafetyEvaluator
+import com.pulihgo.app.quality.RomSafetyLevel
+import com.pulihgo.app.quality.RomSafetyStatus
 import com.pulihgo.app.sensor.Angles
 import com.pulihgo.app.sensor.Axis
 import com.pulihgo.app.sensor.CalibratedAngleController
@@ -57,6 +61,17 @@ private val EXERCISE_AXIS = Axis.ROLL
 fun SensorCheckScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Current demo flow has one exercise. Pass the selected exercise ID once
+    // the Exercise Library is connected to the sensor screen.
+    val romSafetyEvaluator = remember(context) {
+        runCatching {
+            val exercisesJson = context.assets.open("mock_data/exercises.json")
+                .bufferedReader().use { it.readText() }
+            val config = RomSafetyConfig.fromExercisesJson(exercisesJson, exerciseId = "EX001")
+            RomSafetyEvaluator(config)
+        }.getOrNull()
+    }
 
     var savedOffset by rememberSaveable { mutableStateOf<DoubleArray?>(null) }
 
@@ -153,6 +168,12 @@ fun SensorCheckScreen(onBack: () -> Unit) {
                 onCalibrate = controller::calibrate,
                 onReset = controller::resetCalibration,
             )
+            RomSafetyCard(
+                status = if (ready && state.calibration is CalibrationState.Calibrated) {
+                    romSafetyEvaluator?.evaluate(state.calibrated?.get(EXERCISE_AXIS))
+                } else null,
+                configAvailable = romSafetyEvaluator != null,
+            )
             RepetitionCard(
                 count = repCount,
                 lastRepetition = lastRepetition,
@@ -161,6 +182,67 @@ fun SensorCheckScreen(onBack: () -> Unit) {
             )
             AnglesCard("Sudut terkalibrasi (relatif ke posisi awal)", state.calibrated, highlight = EXERCISE_AXIS)
             AnglesCard("Sudut mentah dari sensor", state.raw, highlight = null)
+        }
+    }
+}
+
+private data class RomSafetyCardPresentation(
+    val title: String,
+    val instruction: String,
+    val background: Color,
+    val foreground: Color,
+)
+
+@Composable
+private fun RomSafetyCard(status: RomSafetyStatus?, configAvailable: Boolean) {
+    val presentation = when {
+        !configAvailable -> RomSafetyCardPresentation(
+            "Batas ROM tidak tersedia",
+            "Konfigurasi batas latihan tidak dapat dibaca. Peringatan ROM belum aktif.",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+        )
+        status == null -> RomSafetyCardPresentation(
+            "Pemantauan batas ROM",
+            "Kalibrasi perangkat dan pastikan sensor terhubung untuk mengaktifkan peringatan.",
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        status.level == RomSafetyLevel.LIMIT_EXCEEDED -> RomSafetyCardPresentation(
+            "Batas ROM terlampaui",
+            "Kembalikan gerakan perlahan ke posisi awal yang nyaman. Hentikan latihan jika nyeri.",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+        )
+        status.level == RomSafetyLevel.APPROACHING_LIMIT -> RomSafetyCardPresentation(
+            "Mendekati batas ROM",
+            "Perlambat gerakan dan jangan memaksakan rotasi lengan.",
+            Color(0xFFFFF1CC),
+            Color(0xFF663C00),
+        )
+        else -> RomSafetyCardPresentation(
+            "ROM dalam batas",
+            "Lanjutkan gerakan secara perlahan dan terkendali.",
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = presentation.background)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(presentation.title, style = MaterialTheme.typography.titleMedium, color = presentation.foreground)
+            if (status != null) {
+                Text(
+                    String.format(
+                        Locale.US,
+                        "ROM saat ini: %.1f° | Mulai peringatan: %.1f° | Batas: %.1f°",
+                        status.currentRomDeg, status.warningStartDeg, status.ceilingDeg,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = presentation.foreground,
+                )
+            }
+            Text(presentation.instruction, style = MaterialTheme.typography.bodyMedium, color = presentation.foreground)
         }
     }
 }
