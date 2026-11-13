@@ -28,6 +28,8 @@ import com.pulihgo.app.auth.LoginResult
 import com.pulihgo.app.auth.SessionStore
 import com.pulihgo.app.data.MockDataSource
 import com.pulihgo.app.data.exercise.ExerciseCatalog
+import com.pulihgo.app.data.session.ExerciseSessionStore
+import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.account.ForgotPasswordScreen
 import com.pulihgo.app.ui.account.LoginScreen
@@ -39,7 +41,7 @@ import com.pulihgo.app.ui.home.PatientHomeScreen
 import com.pulihgo.app.ui.onboarding.OnboardingScreen
 import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
-import com.pulihgo.app.ui.sensor.SensorCheckScreen
+import com.pulihgo.app.ui.sensor.LiveExerciseScreen
 import com.pulihgo.app.ui.therapist.TherapistHomeScreen
 import java.time.LocalDate
 import java.time.LocalTime
@@ -66,6 +68,7 @@ fun AppNavigation(
     val dataSource = remember { MockDataSource(context.applicationContext) }
     val auth = remember { AuthRepository(dataSource.loadUsers()) }
     val sessionStore = remember { SessionStore(context.applicationContext) }
+    val exerciseSessionStore = remember { ExerciseSessionStore(context.applicationContext) }
     val prefs = remember { context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE) }
     val exercises = remember {
         runCatching { ExerciseCatalog(context.applicationContext).loadExercises() }
@@ -73,6 +76,7 @@ fun AppNavigation(
     }
 
     var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastSavedPainLevel by remember { mutableStateOf<SessionPainLevel?>(null) }
     var draftEmail by rememberSaveable { mutableStateOf("") }
     // UI-only exercise data until the sensor/session repository is integrated.
     var demoSessionCompleted by rememberSaveable { mutableStateOf(false) }
@@ -195,9 +199,14 @@ fun AppNavigation(
             exercises = exercises,
             onSelectExercise = { exercise ->
                 selectedExerciseId = exercise.id
+                lastSavedPainLevel = null
                 navigate(AppRoute.PATIENT_EXERCISE_PREPARATION)
             },
             onBack = { goBack() },
+            onHome = { resetTo(AppRoute.PATIENT_HOME) },
+            onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+            onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+            isDark = isDark,
         )
 
         AppRoute.PATIENT_EXERCISE_PREPARATION -> {
@@ -206,7 +215,13 @@ fun AppNavigation(
                 PatientExercisePreparationScreen(
                     exercise = exercise,
                     onBack = { goBack() },
-                    onContinueToCalibration = { navigate(AppRoute.SENSOR_CHECK) },
+                    onContinueToCalibration = {
+                        lastSavedPainLevel = null
+                        navigate(AppRoute.SENSOR_CHECK)
+                    },
+                    onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+                    isDark = isDark,
+                    savedPainLevel = lastSavedPainLevel,
                 )
             } else {
                 PatientExerciseLibraryScreen(
@@ -216,11 +231,52 @@ fun AppNavigation(
                         navigate(AppRoute.PATIENT_EXERCISE_PREPARATION)
                     },
                     onBack = { goBack() },
+                    onHome = { resetTo(AppRoute.PATIENT_HOME) },
+                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+                    onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+                    isDark = isDark,
                 )
             }
         }
 
-        AppRoute.SENSOR_CHECK -> SensorCheckScreen(onBack = { goBack() })
+        AppRoute.SENSOR_CHECK -> {
+            val exercise = exercises.firstOrNull { it.id == selectedExerciseId }
+            if (exercise != null && user != null) {
+                LiveExerciseScreen(
+                    exercise = exercise,
+                    patientId = user.id,
+                    isDark = isDark,
+                    onBack = { goBack() },
+                    onSettings = {
+                        // Leave the unsaved live screen before opening Settings.
+                        goBack()
+                        navigate(AppRoute.PATIENT_SETTINGS)
+                    },
+                    onSessionCompleted = { record ->
+                        val stored = exerciseSessionStore.append(record)
+                        if (stored) {
+                            lastSavedPainLevel = record.painLevel
+                            goBack() // return to Preparation with Figma saved status banner
+                        }
+                        stored
+                    },
+                )
+            } else {
+                // No fabricated exercise and no recording under a different patient.
+                PatientExerciseLibraryScreen(
+                    exercises = exercises,
+                    onSelectExercise = { selected ->
+                        selectedExerciseId = selected.id
+                        navigate(AppRoute.PATIENT_EXERCISE_PREPARATION)
+                    },
+                    onBack = { goBack() },
+                    onHome = { resetTo(AppRoute.PATIENT_HOME) },
+                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+                    onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+                    isDark = isDark,
+                )
+            }
+        }
 
         AppRoute.PATIENT_SUMMARY_DEMO -> SummaryDemoHandoff(
             hasDemoSessions = demoSessionCompleted,
