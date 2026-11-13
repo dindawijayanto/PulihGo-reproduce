@@ -342,7 +342,9 @@ fun LoginScreen(
             ErrorText(error)
             Spacer(Modifier.height(20.dp))
             PrimaryAction("Log In  →", onClick = {
-                error = if (!AccountValidation.isValidEmail(email)) {
+                error = if (email.isBlank()) {
+                    "Enter your email address or username."
+                } else if (email.contains("@") && !AccountValidation.isValidEmail(email)) {
                     "Enter a valid email address."
                 } else if (password.isBlank()) {
                     "Enter your password."
@@ -365,7 +367,7 @@ fun LoginScreen(
             SmallLink("Register as Patient", onRegister)
         }
         Spacer(Modifier.height(12.dp))
-        Text("Demo: ${DemoAuthRepository.DEMO_EMAIL} / ${DemoAuthRepository.DEMO_PASSWORD}",
+        Text("Demo Patient: alya@pulihgo.demo / demo123 · Therapist: therapist@pulihgo.demo / demo123",
             color = p.secondary, fontSize = 10.sp, textAlign = TextAlign.Center)
     }
 }

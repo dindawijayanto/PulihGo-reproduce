@@ -1,0 +1,31 @@
+{
+  "users": [
+    {
+      "id": "U001",
+      "username": "therapist01",
+      "password": "demo123",
+      "role": "THERAPIST",
+      "fullName": "Demo Therapist",
+      "email": "therapist@pulihgo.demo",
+      "isActive": true
+    },
+    {
+      "id": "U002",
+      "username": "patient01",
+      "password": "demo123",
+      "role": "PATIENT",
+      "fullName": "Alya Putri",
+      "email": "alya@pulihgo.demo",
+      "isActive": true
+    },
+    {
+      "id": "U003",
+      "username": "patient02",
+      "password": "demo123",
+      "role": "PATIENT",
+      "fullName": "Bima Pratama",
+      "email": "bima@pulihgo.demo",
+      "isActive": true
+    }
+  ]
+}

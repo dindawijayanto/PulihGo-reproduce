@@ -1,0 +1,101 @@
+
+{
+  "sessions": [
+    {
+      "id": "S001",
+      "patientId": "P001",
+      "exerciseId": "EX001",
+      "startedAt": "2026-11-08T09:00:00+07:00",
+      "endedAt": "2026-11-08T09:03:00+07:00",
+      "durationMs": 180000,
+      "totalReps": 3,
+      "targetReps": 10,
+      "peakRomDeg": 56.0,
+      "targetRomDeg": 70.0,
+      "averageSmoothness": 0.82,
+      "painReported": false,
+      "stopReason": null,
+      "status": "COMPLETED",
+      "repetitions": [
+        {
+          "index": 1,
+          "peakRomDeg": 56.0,
+          "durationMs": 2500,
+          "samples": [0, 12, 32, 45, 56, 42, 20, 6]
+        },
+        {
+          "index": 2,
+          "peakRomDeg": 52.0,
+          "durationMs": 2400,
+          "samples": [0, 15, 33, 44, 52, 38, 18, 5]
+        },
+        {
+          "index": 3,
+          "peakRomDeg": 54.0,
+          "durationMs": 2600,
+          "samples": [0, 14, 35, 46, 54, 40, 19, 6]
+        }
+      ]
+    },
+    {
+      "id": "S002",
+      "patientId": "P001",
+      "exerciseId": "EX001",
+      "startedAt": "2026-11-06T09:30:00+07:00",
+      "endedAt": "2026-11-06T09:33:30+07:00",
+      "durationMs": 210000,
+      "totalReps": 2,
+      "targetReps": 10,
+      "peakRomDeg": 65.0,
+      "targetRomDeg": 70.0,
+      "averageSmoothness": 0.88,
+      "painReported": false,
+      "stopReason": null,
+      "status": "COMPLETED",
+      "repetitions": [
+        {
+          "index": 1,
+          "peakRomDeg": 65.0,
+          "durationMs": 2700,
+          "samples": [0, 15, 35, 48, 65, 45, 22, 6]
+        },
+        {
+          "index": 2,
+          "peakRomDeg": 62.0,
+          "durationMs": 2500,
+          "samples": [0, 14, 34, 47, 62, 43, 19, 5]
+        }
+      ]
+    },
+    {
+      "id": "S003",
+      "patientId": "P002",
+      "exerciseId": "EX001",
+      "startedAt": "2026-11-07T10:00:00+07:00",
+      "endedAt": "2026-11-07T10:02:40+07:00",
+      "durationMs": 160000,
+      "totalReps": 2,
+      "targetReps": 10,
+      "peakRomDeg": 42.0,
+      "targetRomDeg": 70.0,
+      "averageSmoothness": 0.71,
+      "painReported": true,
+      "stopReason": "PAIN_REPORTED",
+      "status": "STOPPED",
+      "repetitions": [
+        {
+          "index": 1,
+          "peakRomDeg": 42.0,
+          "durationMs": 2800,
+          "samples": [0, 14, 28, 35, 42, 30, 18, 5]
+        },
+        {
+          "index": 2,
+          "peakRomDeg": 38.0,
+          "durationMs": 3000,
+          "samples": [0, 12, 27, 33, 38, 25, 15, 6]
+        }
+      ]
+    }
+  ]
+}
