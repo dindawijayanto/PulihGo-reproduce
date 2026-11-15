@@ -42,8 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,22 +68,18 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.pulihgo.app.R
 import com.pulihgo.app.data.exercise.Exercise
 import com.pulihgo.app.data.session.ExerciseSessionRecord
-import com.pulihgo.app.data.session.RepetitionMetric
 import com.pulihgo.app.data.session.SessionPainLevel
-import com.pulihgo.app.detection.RepetitionDetector
-import com.pulihgo.app.detection.RepetitionState
-import com.pulihgo.app.quality.RomSafetyConfig
-import com.pulihgo.app.quality.RomSafetyEvaluator
 import com.pulihgo.app.quality.RomSafetyLevel
-import com.pulihgo.app.quality.SessionSmoothnessTracker
 import com.pulihgo.app.sensor.AngleCalibrator
 import com.pulihgo.app.sensor.Axis
 import com.pulihgo.app.sensor.CalibratedAngleController
 import com.pulihgo.app.sensor.CalibrationState
 import com.pulihgo.app.sensor.DeviceAngleSensor
+import com.pulihgo.app.sensor.LiveExerciseSnapshot
+import com.pulihgo.app.sensor.LiveExerciseTracker
+import com.pulihgo.app.sensor.LivePhase
 import com.pulihgo.app.sensor.SensorHealth
 import java.util.Locale
-import kotlin.math.abs
 
 /** Live exercise Figma P10/P19/P20. Existing SensorCheckScreen remains untouched. */
 private val LiveTeal = Color(0xFF0D7C7C)
@@ -131,27 +125,19 @@ fun LiveExerciseScreen(
             calibrator = AngleCalibrator(),
         )
     }
-    val detector = remember(exercise.id, exercise.targetRomDeg) {
-        runCatching { RepetitionDetector(targetRomDeg = exercise.targetRomDeg) }.getOrNull()
+    val tracker = remember(exercise.id, exercise.targetRomDeg, exercise.romCeilingDeg) {
+        runCatching { LiveExerciseTracker(exercise.targetRomDeg, exercise.romCeilingDeg) }.getOrNull()
     }
-    val evaluator = remember(exercise.id, exercise.romCeilingDeg) {
-        runCatching { RomSafetyEvaluator(RomSafetyConfig(exercise.romCeilingDeg)) }.getOrNull()
-    }
-    val smoothness = remember(exercise.id) { SessionSmoothnessTracker() }
     val state by controller.state.collectAsStateWithLifecycle()
 
     var calibrationRequested by remember { mutableStateOf(false) }
-    var measuredRom by remember { mutableDoubleStateOf(0.0) }
-    var peakRom by remember { mutableDoubleStateOf(0.0) }
-    var repCount by remember { mutableIntStateOf(0) }
-    var completedRepetitions by remember { mutableStateOf<List<RepetitionMetric>>(emptyList()) }
+    var live by remember { mutableStateOf(LiveExerciseSnapshot()) }
     var startEpochMs by remember { mutableLongStateOf(0L) }
     var showPainCheck by remember { mutableStateOf(false) }
     var showExitConfirmation by remember { mutableStateOf(false) }
     var exitToSettings by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(true) }
-    var isReturningFromTarget by remember { mutableStateOf(false) }
 
     val tones = remember { runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 35) }.getOrNull() }
     DisposableEffect(tones) { onDispose { tones?.release() } }
@@ -169,7 +155,8 @@ fun LiveExerciseScreen(
             controller.calibrate()
         }
     }
-    LaunchedEffect(controller, detector) {
+    LaunchedEffect(controller, tracker) {
+        if (tracker == null) return@LaunchedEffect
         controller.samples.collect { sample ->
             val current = controller.state.value
             if (current.calibration is CalibrationState.Calibrated &&
@@ -178,48 +165,26 @@ fun LiveExerciseScreen(
                 val angle = sample.angle(Axis.ROLL)
                 if (angle.isFinite()) {
                     if (startEpochMs == 0L) startEpochMs = System.currentTimeMillis()
-                    measuredRom = abs(angle)
-                    peakRom = maxOf(peakRom, measuredRom)
-                    
-                    if (exercise.targetRomDeg > 0.0 && measuredRom >= exercise.targetRomDeg) {
-                        isReturningFromTarget = true
-                    }
-                    
-                    detector?.let { d ->
-                        val completed = d.processAngle(angle, sample.elapsedMs)
-                        repCount = d.count
-                        if (d.state == RepetitionState.IDLE) {
-                            isReturningFromTarget = false
-                        }
-                        if (completed != null) {
-                            val score = smoothness.record(completed)
-                            val metric = RepetitionMetric(
-                                repetitionNumber = completed.repetitionNumber,
-                                peakRomDeg = completed.peakRomDeg,
-                                durationMs = completed.durationMs,
-                                smoothnessScore = score?.value,
-                            )
-                            completedRepetitions = completedRepetitions + metric
-                        }
-                    }
+                    live = tracker.onAngle(angle, sample.elapsedMs)
                 }
             }
         }
     }
 
     val ready = state.health is SensorHealth.Streaming &&
-        state.calibration is CalibrationState.Calibrated && detector != null && evaluator != null
-    val romLevel = if (ready) evaluator?.evaluate(measuredRom)?.level else null
-    val exceedsCeiling = romLevel == RomSafetyLevel.LIMIT_EXCEEDED
-    
-    val ringColor = when {
-        exceedsCeiling -> LiveRed
-        isReturningFromTarget -> LiveGreen
-        else -> LiveTeal
+        state.calibration is CalibrationState.Calibrated && tracker != null
+    val phase = if (ready) live.phase else LivePhase.BASELINE
+    val exceedsCeiling = phase == LivePhase.CEILING_EXCEEDED
+    val targetHit = phase == LivePhase.TARGET_HIT
+
+    val ringColor = when (phase) {
+        LivePhase.CEILING_EXCEEDED -> LiveRed
+        LivePhase.TARGET_HIT -> LiveGreen
+        LivePhase.BASELINE -> LiveTeal
     }
 
-    LaunchedEffect(romLevel, isReturningFromTarget, soundEnabled) {
-        if (soundEnabled && ready && (exceedsCeiling || isReturningFromTarget)) {
+    LaunchedEffect(phase, soundEnabled) {
+        if (soundEnabled && phase != LivePhase.BASELINE) {
             tones?.startTone(ToneGenerator.TONE_PROP_BEEP, 140)
         }
     }
@@ -233,11 +198,11 @@ fun LiveExerciseScreen(
                 exerciseId = exercise.id,
                 startedAtEpochMs = start,
                 endedAtEpochMs = end,
-                repetitions = repCount,
-                peakRomDeg = peakRom,
-                averageSmoothness = smoothness.snapshot().averageScore,
+                repetitions = live.repetitions,
+                peakRomDeg = live.peakRomDeg,
+                averageSmoothness = live.averageSmoothness,
                 painLevel = pain,
-                repetitionDetails = completedRepetitions,
+                repetitionDetails = live.completedRepetitions,
             )
         }.getOrNull()
         if (record == null || !onSessionCompleted(record)) saveFailed = true
@@ -285,7 +250,7 @@ fun LiveExerciseScreen(
                         drawCircle(color = ringColor, style = Stroke(width = 12.dp.toPx()))
                     }
                     Text(
-                        if (ready) String.format(Locale.US, "%.0f", measuredRom) else "0",
+                        if (ready) String.format(Locale.US, "%.0f", live.currentRomDeg) else "0",
                         style = MaterialTheme.typography.displayLarge,
                         fontSize = 52.sp, fontWeight = FontWeight.ExtraBold,
                         color = if (exceedsCeiling) LiveRed else c.text,
@@ -293,22 +258,28 @@ fun LiveExerciseScreen(
                 }
             }
             Spacer(Modifier.height(22.dp))
+            val health = state.health
+            val sensorLost = health is SensorHealth.Stalled || health is SensorHealth.NoData
             val instructionTitle = when {
-                evaluator == null || detector == null -> "Exercise parameters unavailable"
-                state.health is SensorHealth.Unavailable -> "Sensor unavailable"
+                tracker == null -> "Exercise parameters unavailable"
+                health is SensorHealth.Unavailable -> "Sensor unavailable"
+                health is SensorHealth.RegistrationFailed -> "Sensor could not start"
+                sensorLost -> "Sensor reading paused"
                 state.calibration is CalibrationState.FailedUnstable -> "Calibration was unstable"
                 !ready -> "Hold still while calibrating"
                 exceedsCeiling -> "WARNING: SLOW DOWN & RETURN"
-                isReturningFromTarget -> "TARGET HIT!"
+                targetHit -> "TARGET HIT!"
                 else -> "Move slowly and with control."
             }
             val instructionBody = when {
-                evaluator == null || detector == null -> "Check the exercise target and ROM ceiling."
-                state.health is SensorHealth.Unavailable -> "This device has no compatible movement sensor."
+                tracker == null -> "Check the exercise target and ROM ceiling."
+                health is SensorHealth.Unavailable -> "This device has no compatible movement sensor."
+                health is SensorHealth.RegistrationFailed -> "Close other apps using the sensor, then reopen this session."
+                sensorLost -> "No movement data received. Keep the phone attached; it resumes automatically."
                 state.calibration is CalibrationState.FailedUnstable -> "Keep the phone still, then retry calibration."
                 !ready -> "Keep your forearm neutral. Waiting for a valid sensor reading."
                 exceedsCeiling -> "Exceeded ROM limit of ${exercise.romCeilingDeg.toInt()}°. Return slowly."
-                isReturningFromTarget -> "Now rotate slowly back to the starting point."
+                targetHit -> "Now rotate slowly back to the starting point."
                 else -> "Aim for your target ROM of ${exercise.targetRomDeg.toInt()}°"
             }
             val warn = exceedsCeiling
@@ -332,7 +303,7 @@ fun LiveExerciseScreen(
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = when { warn -> LiveRed; isReturningFromTarget && ready -> LiveGreen; else -> c.text },
+                        color = when { warn -> LiveRed; targetHit -> LiveGreen; else -> c.text },
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(4.dp))
@@ -347,7 +318,7 @@ fun LiveExerciseScreen(
             }
             // Preserve PGF-QS-02's approaching-limit safety guidance while the
             // main target-hit display follows Figma's green P19 state.
-            if (ready && romLevel == RomSafetyLevel.APPROACHING_LIMIT) {
+            if (ready && live.safetyLevel == RomSafetyLevel.APPROACHING_LIMIT) {
                 Text("Approaching ROM limit (${exercise.romCeilingDeg.toInt()}°). Move slowly.",
                     color = LiveTeal, fontSize = 11.sp, lineHeight = 15.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
@@ -361,8 +332,8 @@ fun LiveExerciseScreen(
             }
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiveStatCard("REPETITIONS", "$repCount", c, Modifier.weight(1f))
-                LiveStatCard("PEAK ANGLE", String.format(Locale.US, "%.0f", peakRom),
+                LiveStatCard("REPETITIONS", "${live.repetitions}", c, Modifier.weight(1f))
+                LiveStatCard("PEAK ANGLE", String.format(Locale.US, "%.0f", live.peakRomDeg),
                     c, Modifier.weight(1f))
             }
             Spacer(Modifier.height(24.dp))
@@ -372,7 +343,12 @@ fun LiveExerciseScreen(
                 shape = RoundedCornerShape(12.dp),
                 enabled = startEpochMs > 0L,
                 colors = ButtonDefaults.buttonColors(containerColor = LiveTeal),
-            ) { Text("✓  Finish Practice", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+            ) {
+                Icon(painterResource(R.drawable.pg_icon_check), contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Finish Practice", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { saveSession(SessionPainLevel.STOPPED_DUE_TO_PAIN) },
@@ -380,7 +356,15 @@ fun LiveExerciseScreen(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = c.softRed),
                 border = androidx.compose.foundation.BorderStroke(1.3.dp, LiveRed),
-            ) { Text("●  Stop, it hurts", color = LiveRed, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+            ) {
+                Box(Modifier.size(18.dp).clip(CircleShape).background(LiveRed),
+                    contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.pg_exercise_alert_mark), contentDescription = null,
+                        tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text("Stop, it hurts", color = LiveRed, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(24.dp))
             // activate this if want to show detailed repetition on exercise screen
 //            if (completedRepetitions.isNotEmpty()) {
