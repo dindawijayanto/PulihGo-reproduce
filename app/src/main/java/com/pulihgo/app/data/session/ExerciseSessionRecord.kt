@@ -6,6 +6,21 @@ import org.json.JSONObject
 /** Patient-reported result. STOPPED_DUE_TO_PAIN is distinct from MILD_PAIN. */
 enum class SessionPainLevel { NO_PAIN, MILD_PAIN, STOPPED_DUE_TO_PAIN }
 
+/** Repetition event metric for fine-grained exercise analysis across modules. */
+data class RepetitionMetric(
+    val repetitionNumber: Int,
+    val peakRomDeg: Double,
+    val durationMs: Long,
+    val smoothnessScore: Double? = null,
+) {
+    init {
+        require(repetitionNumber > 0)
+        require(peakRomDeg.isFinite() && peakRomDeg >= 0.0)
+        require(durationMs >= 0)
+        require(smoothnessScore == null || (smoothnessScore.isFinite() && smoothnessScore in 0.0..1.0))
+    }
+}
+
 /** Values represent genuine calibrated sensor measurements from this session only. */
 data class ExerciseSessionRecord(
     val patientId: String,
@@ -16,6 +31,7 @@ data class ExerciseSessionRecord(
     val peakRomDeg: Double,
     val averageSmoothness: Double?,
     val painLevel: SessionPainLevel,
+    val repetitionDetails: List<RepetitionMetric> = emptyList(),
 ) {
     val stoppedForPain: Boolean get() = painLevel == SessionPainLevel.STOPPED_DUE_TO_PAIN
     init {
@@ -39,6 +55,16 @@ object ExerciseSessionRecordJson {
                 put("peakRomDeg", s.peakRomDeg)
                 put("averageSmoothness", s.averageSmoothness ?: JSONObject.NULL)
                 put("painLevel", s.painLevel.name)
+                put("repetitionDetails", JSONArray().apply {
+                    s.repetitionDetails.forEach { rep ->
+                        put(JSONObject().apply {
+                            put("repetitionNumber", rep.repetitionNumber)
+                            put("peakRomDeg", rep.peakRomDeg)
+                            put("durationMs", rep.durationMs)
+                            put("smoothnessScore", rep.smoothnessScore ?: JSONObject.NULL)
+                        })
+                    }
+                })
             })
         }
     }.toString()
@@ -48,6 +74,21 @@ object ExerciseSessionRecordJson {
         return (0 until data.length()).mapNotNull { index ->
             runCatching {
                 val o = data.getJSONObject(index)
+                val details = if (o.has("repetitionDetails")) {
+                    val detailsArr = o.getJSONArray("repetitionDetails")
+                    (0 until detailsArr.length()).mapNotNull { rIdx ->
+                        runCatching {
+                            val rObj = detailsArr.getJSONObject(rIdx)
+                            RepetitionMetric(
+                                repetitionNumber = rObj.getInt("repetitionNumber"),
+                                peakRomDeg = rObj.getDouble("peakRomDeg"),
+                                durationMs = rObj.getLong("durationMs"),
+                                smoothnessScore = if (rObj.isNull("smoothnessScore")) null else rObj.getDouble("smoothnessScore"),
+                            )
+                        }.getOrNull()
+                    }
+                } else emptyList()
+
                 ExerciseSessionRecord(
                     patientId = o.getString("patientId"),
                     exerciseId = o.getString("exerciseId"),
@@ -58,6 +99,7 @@ object ExerciseSessionRecordJson {
                     averageSmoothness = if (o.isNull("averageSmoothness")) null
                         else o.getDouble("averageSmoothness"),
                     painLevel = SessionPainLevel.valueOf(o.getString("painLevel")),
+                    repetitionDetails = details,
                 )
             }.getOrNull()
         }

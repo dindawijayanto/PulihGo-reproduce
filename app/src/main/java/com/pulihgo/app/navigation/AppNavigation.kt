@@ -28,6 +28,7 @@ import com.pulihgo.app.auth.LoginResult
 import com.pulihgo.app.auth.SessionStore
 import com.pulihgo.app.data.MockDataSource
 import com.pulihgo.app.data.exercise.ExerciseCatalog
+import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
 import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.data.model.User
@@ -43,11 +44,25 @@ import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.LiveExerciseScreen
 import com.pulihgo.app.ui.therapist.TherapistHomeScreen
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 
 private const val PREF_FILE = "pulihgo_local_prefs"
 private const val ONBOARDING_SEEN_KEY = "pulihgo_onboarding_seen"
+
+private fun ExerciseSessionRecord.toHomeExerciseSession(): HomeExerciseSession {
+    val zdt = Instant.ofEpochMilli(startedAtEpochMs).atZone(ZoneId.systemDefault())
+    return HomeExerciseSession(
+        date = zdt.toLocalDate(),
+        repetitions = repetitions,
+        peakRomDegrees = peakRomDeg.toInt(),
+        smoothnessPercent = ((averageSmoothness ?: 0.0) * 100).toInt(),
+        exerciseName = "Forearm Rotation",
+        time = zdt.toLocalTime(),
+    )
+}
 
 private val BackStackSaver = listSaver<List<AppRoute>, String>(
     save = { stack -> stack.map { it.name } },
@@ -115,6 +130,22 @@ fun AppNavigation(
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
 
+    val storedRecords = remember(user?.id, lastSavedPainLevel, demoSessionCompleted) {
+        if (user != null) exerciseSessionStore.read(user.id) else emptyList()
+    }
+    val homeSessions = remember(storedRecords, demoSessionCompleted) {
+        val realMapped = storedRecords.map { it.toHomeExerciseSession() }
+        if (demoSessionCompleted && realMapped.isEmpty()) {
+            listOf(
+                HomeExerciseSession(LocalDate.now(), 4, 62, 84, time = LocalTime.of(7, 45)),
+                HomeExerciseSession(LocalDate.now(), 5, 75, 86, time = LocalTime.of(7, 51)),
+                HomeExerciseSession(LocalDate.now(), 3, 68, 88, time = LocalTime.of(7, 56)),
+            )
+        } else {
+            realMapped
+        }
+    }
+
     when (route) {
         AppRoute.ONBOARDING -> OnboardingScreen(
             isDark = isDark,
@@ -174,11 +205,7 @@ fun AppNavigation(
 
         AppRoute.PATIENT_HOME -> PatientHomeScreen(
             patientName = user?.fullName.orEmpty(),
-            sessions = if (demoSessionCompleted) listOf(
-                HomeExerciseSession(LocalDate.now(), 4, 62, 84, time = LocalTime.of(7, 45)),
-                HomeExerciseSession(LocalDate.now(), 5, 75, 86, time = LocalTime.of(7, 51)),
-                HomeExerciseSession(LocalDate.now(), 3, 68, 88, time = LocalTime.of(7, 56)),
-            ) else emptyList(),
+            sessions = homeSessions,
             onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
             onStartExercise = { navigate(AppRoute.PATIENT_EXERCISES) },
             onOpenSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },

@@ -70,6 +70,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.pulihgo.app.R
 import com.pulihgo.app.data.exercise.Exercise
 import com.pulihgo.app.data.session.ExerciseSessionRecord
+import com.pulihgo.app.data.session.RepetitionMetric
 import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.detection.RepetitionDetector
 import com.pulihgo.app.detection.RepetitionState
@@ -143,6 +144,7 @@ fun LiveExerciseScreen(
     var measuredRom by remember { mutableDoubleStateOf(0.0) }
     var peakRom by remember { mutableDoubleStateOf(0.0) }
     var repCount by remember { mutableIntStateOf(0) }
+    var completedRepetitions by remember { mutableStateOf<List<RepetitionMetric>>(emptyList()) }
     var startEpochMs by remember { mutableLongStateOf(0L) }
     var showPainCheck by remember { mutableStateOf(false) }
     var showExitConfirmation by remember { mutableStateOf(false) }
@@ -189,7 +191,16 @@ fun LiveExerciseScreen(
                         if (d.state == RepetitionState.IDLE) {
                             isReturningFromTarget = false
                         }
-                        if (completed != null) smoothness.record(completed)
+                        if (completed != null) {
+                            val score = smoothness.record(completed)
+                            val metric = RepetitionMetric(
+                                repetitionNumber = completed.repetitionNumber,
+                                peakRomDeg = completed.peakRomDeg,
+                                durationMs = completed.durationMs,
+                                smoothnessScore = score?.value,
+                            )
+                            completedRepetitions = completedRepetitions + metric
+                        }
                     }
                 }
             }
@@ -226,6 +237,7 @@ fun LiveExerciseScreen(
                 peakRomDeg = peakRom,
                 averageSmoothness = smoothness.snapshot().averageScore,
                 painLevel = pain,
+                repetitionDetails = completedRepetitions,
             )
         }.getOrNull()
         if (record == null || !onSessionCompleted(record)) saveFailed = true
@@ -295,7 +307,7 @@ fun LiveExerciseScreen(
                 state.health is SensorHealth.Unavailable -> "This device has no compatible movement sensor."
                 state.calibration is CalibrationState.FailedUnstable -> "Keep the phone still, then retry calibration."
                 !ready -> "Keep your forearm neutral. Waiting for a valid sensor reading."
-                exceedsCeiling -> "Exceeded configured ROM limit of ${exercise.romCeilingDeg.toInt()}°. Return slowly."
+                exceedsCeiling -> "Exceeded ROM limit of ${exercise.romCeilingDeg.toInt()}°. Return slowly."
                 isReturningFromTarget -> "Now rotate slowly back to the starting point."
                 else -> "Aim for your target ROM of ${exercise.targetRomDeg.toInt()}°"
             }
@@ -370,6 +382,31 @@ fun LiveExerciseScreen(
                 border = androidx.compose.foundation.BorderStroke(1.3.dp, LiveRed),
             ) { Text("●  Stop, it hurts", color = LiveRed, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(24.dp))
+            // activate this if want to show detailed repetition on exercise screen
+//            if (completedRepetitions.isNotEmpty()) {
+//                Spacer(Modifier.height(24.dp))
+//                Card(
+//                    modifier = Modifier.fillMaxWidth().testTag("live_repetition_events"),
+//                    colors = CardDefaults.cardColors(containerColor = c.surface),
+//                    border = androidx.compose.foundation.BorderStroke(1.dp, c.border),
+//                    shape = RoundedCornerShape(16.dp),
+//                ) {
+//                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+//                        Text("COMPLETED REPETITIONS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = c.muted, letterSpacing = .6.sp)
+//                        Spacer(Modifier.height(8.dp))
+//                        completedRepetitions.takeLast(5).reversed().forEach { rep ->
+//                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+//                                Text("Rep #${rep.repetitionNumber}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.text, modifier = Modifier.weight(1f))
+//                                Text("Peak: %.0f°".format(rep.peakRomDeg), fontSize = 12.sp, color = c.text, modifier = Modifier.weight(1f))
+//                                Text(
+//                                    if (rep.smoothnessScore != null) "Smooth: %.0f%%".format(rep.smoothnessScore * 100) else "Smooth: -",
+//                                    fontSize = 12.sp, color = LiveTeal, fontWeight = FontWeight.SemiBold,
+//                                )
+//                            }
+//                        }
+//                    }
+//                }
+//            }
         }
     }
 
