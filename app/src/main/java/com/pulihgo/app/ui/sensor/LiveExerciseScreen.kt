@@ -72,6 +72,7 @@ import com.pulihgo.app.data.exercise.Exercise
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.detection.RepetitionDetector
+import com.pulihgo.app.detection.RepetitionState
 import com.pulihgo.app.quality.RomSafetyConfig
 import com.pulihgo.app.quality.RomSafetyEvaluator
 import com.pulihgo.app.quality.RomSafetyLevel
@@ -148,6 +149,7 @@ fun LiveExerciseScreen(
     var exitToSettings by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(true) }
+    var isReturningFromTarget by remember { mutableStateOf(false) }
 
     val tones = remember { runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 35) }.getOrNull() }
     DisposableEffect(tones) { onDispose { tones?.release() } }
@@ -176,9 +178,17 @@ fun LiveExerciseScreen(
                     if (startEpochMs == 0L) startEpochMs = System.currentTimeMillis()
                     measuredRom = abs(angle)
                     peakRom = maxOf(peakRom, measuredRom)
+                    
+                    if (exercise.targetRomDeg > 0.0 && measuredRom >= exercise.targetRomDeg) {
+                        isReturningFromTarget = true
+                    }
+                    
                     detector?.let { d ->
                         val completed = d.processAngle(angle, sample.elapsedMs)
                         repCount = d.count
+                        if (d.state == RepetitionState.IDLE) {
+                            isReturningFromTarget = false
+                        }
                         if (completed != null) smoothness.record(completed)
                     }
                 }
@@ -190,15 +200,15 @@ fun LiveExerciseScreen(
         state.calibration is CalibrationState.Calibrated && detector != null && evaluator != null
     val romLevel = if (ready) evaluator?.evaluate(measuredRom)?.level else null
     val exceedsCeiling = romLevel == RomSafetyLevel.LIMIT_EXCEEDED
-    val targetReached = ready && exercise.targetRomDeg > 0.0 && measuredRom >= exercise.targetRomDeg
+    
     val ringColor = when {
         exceedsCeiling -> LiveRed
-        targetReached -> LiveGreen
+        isReturningFromTarget -> LiveGreen
         else -> LiveTeal
     }
 
-    LaunchedEffect(romLevel, targetReached, soundEnabled) {
-        if (soundEnabled && ready && (exceedsCeiling || targetReached)) {
+    LaunchedEffect(romLevel, isReturningFromTarget, soundEnabled) {
+        if (soundEnabled && ready && (exceedsCeiling || isReturningFromTarget)) {
             tones?.startTone(ToneGenerator.TONE_PROP_BEEP, 140)
         }
     }
@@ -277,7 +287,7 @@ fun LiveExerciseScreen(
                 state.calibration is CalibrationState.FailedUnstable -> "Calibration was unstable"
                 !ready -> "Hold still while calibrating"
                 exceedsCeiling -> "WARNING: SLOW DOWN & RETURN"
-                targetReached -> "TARGET HIT!"
+                isReturningFromTarget -> "TARGET HIT!"
                 else -> "Move slowly and with control."
             }
             val instructionBody = when {
@@ -286,7 +296,7 @@ fun LiveExerciseScreen(
                 state.calibration is CalibrationState.FailedUnstable -> "Keep the phone still, then retry calibration."
                 !ready -> "Keep your forearm neutral. Waiting for a valid sensor reading."
                 exceedsCeiling -> "Exceeded configured ROM limit of ${exercise.romCeilingDeg.toInt()}°. Return slowly."
-                targetReached -> "Now rotate slowly back to the starting point."
+                isReturningFromTarget -> "Now rotate slowly back to the starting point."
                 else -> "Aim for your target ROM of ${exercise.targetRomDeg.toInt()}°"
             }
             val warn = exceedsCeiling
@@ -310,7 +320,7 @@ fun LiveExerciseScreen(
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = when { warn -> LiveRed; targetReached && ready -> LiveGreen; else -> c.text },
+                        color = when { warn -> LiveRed; isReturningFromTarget && ready -> LiveGreen; else -> c.text },
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(4.dp))
