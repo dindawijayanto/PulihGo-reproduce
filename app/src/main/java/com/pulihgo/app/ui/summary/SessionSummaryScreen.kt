@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -73,12 +75,16 @@ fun PatientSessionSummaryScreen(
     onHome: () -> Unit,
     onExercise: () -> Unit,
     onSettings: () -> Unit,
-    /** Extra content below the report (PGF-PRO-03 session history). */
-    extraContent: LazyListScope.() -> Unit = {},
+    /** PGF-PRO-03: every recorded session (newest first) and the one being viewed. */
+    history: List<PatientSession> = emptyList(),
+    onSelectSession: (sessionId: String) -> Unit = {},
 ) {
     val c = summaryColors(isDark)
     var showEffort by rememberSaveable { mutableStateOf(false) }
     val state = SessionSummaryLogic.stateOf(session)
+    val listState = rememberLazyListState()
+    // Picking a session from the history list swaps the report above it: bring it into view.
+    LaunchedEffect(session?.id) { if (listState.firstVisibleItemIndex > 0) listState.animateScrollToItem(0) }
 
     Column(Modifier.fillMaxSize().background(c.background).statusBarsPadding().testTag("patient_summary")) {
         if (state == SummaryState.EMPTY) {
@@ -90,6 +96,7 @@ fun PatientSessionSummaryScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -100,7 +107,18 @@ fun PatientSessionSummaryScreen(
                     Text("Session Stats", style = sumText(16.sp, FontWeight.Black, c.text))
                 }
                 item { SessionStats(c, s, onExplainEffort = { showEffort = true }) }
-                extraContent()
+                if (history.isNotEmpty()) {
+                    item { ProgressCard(c, SessionHistoryLogic.progress(history), SessionHistoryLogic.romTrend(history)) }
+                    item {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text("Session History", style = sumText(16.sp, FontWeight.Black, c.text), modifier = Modifier.weight(1f))
+                            Text("${history.size} ${if (history.size == 1) "session" else "sessions"}", style = sumText(12.sp, FontWeight.SemiBold, c.muted))
+                        }
+                    }
+                    items(history, key = { it.id }) { h ->
+                        HistoryRow(c, h, selected = h.id == s.id, onClick = { onSelectSession(h.id) })
+                    }
+                }
             }
         }
         SummaryBottomTabs(c, onHome = onHome, onExercise = onExercise)
@@ -300,6 +318,107 @@ private fun StatTile(
     }
 }
 
+// ---------------------------------------------------------------- progress & history (PGF-PRO-03)
+
+@Composable
+private fun ProgressCard(c: SummaryColors, p: ProgressSnapshot, trend: List<Double>) {
+    Column(
+        Modifier.fillMaxWidth().clip(CardShape).background(c.surface).border(1.dp, c.outline, CardShape).padding(16.dp)
+            .testTag("summary_progress"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("My Progress", style = sumText(16.sp, FontWeight.Bold, c.text))
+                Text("Peak ROM across your recorded sessions.", style = sumText(13.sp, FontWeight.Normal, c.muted, line = 18.sp))
+            }
+            val change = p.romChangeDeg
+            if (change != null) {
+                val up = change >= 0
+                Text(
+                    (if (up) "+" else "−") + "${kotlin.math.abs(change).toInt()}°",
+                    style = sumText(14.sp, FontWeight.ExtraBold, if (up) Green else Amber),
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                        .background((if (up) Green else Amber).copy(alpha = 0.12f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
+        if (trend.size >= 2) {
+            Canvas(
+                Modifier.fillMaxWidth().height(56.dp).semantics {
+                    contentDescription = "Peak ROM trend: " + trend.joinToString { "${it.toInt()} degrees" }
+                },
+            ) {
+                val pad = 5.dp.toPx()
+                val lo = trend.min()
+                val span = (trend.max() - lo).coerceAtLeast(1.0)
+                val pts = trend.mapIndexed { i, v ->
+                    Offset(pad + (size.width - 2 * pad) * i / (trend.size - 1), pad + (size.height - 2 * pad) * (1 - ((v - lo) / span).toFloat()))
+                }
+                pts.zipWithNext { a, b -> drawLine(Teal, a, b, strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round) }
+                pts.forEach { drawCircle(Teal, radius = 3.dp.toPx(), center = it) }
+            }
+        } else {
+            Text("Complete another session to see your ROM trend.", style = sumText(12.sp, FontWeight.Normal, c.muted))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProgressStat(c, "SESSIONS", "${p.totalSessions}", Modifier.weight(1f))
+            ProgressStat(c, "TOTAL REPS", "${p.totalRepetitions}", Modifier.weight(1f))
+            ProgressStat(c, "BEST ROM", p.bestPeakRomDeg?.let { "${it.toInt()}°" } ?: "—", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ProgressStat(c: SummaryColors, label: String, value: String, modifier: Modifier) {
+    Column(modifier.clip(RoundedCornerShape(12.dp)).background(c.chartPlaceholder).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Text(value, style = sumText(16.sp, FontWeight.ExtraBold, c.text))
+        Text(label, style = sumText(10.sp, FontWeight.Bold, c.muted, tracking = 0.5.sp))
+    }
+}
+
+@Composable
+private fun HistoryRow(c: SummaryColors, s: PatientSession, selected: Boolean, onClick: () -> Unit) {
+    val comfort = SessionSummaryLogic.comfort(s.record.painLevel)
+    val comfortColor = when (comfort.tone) {
+        ComfortTone.GOOD -> Green
+        ComfortTone.CAUTION -> Amber
+        ComfortTone.STOP -> Red
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) c.selected else c.surface)
+            .border(1.dp, if (selected) Teal else c.outline, RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button, onClickLabel = "View this session", onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag("history_${s.id}"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(R.drawable.pg_home_pulse), null, tint = Teal, modifier = Modifier.size(18.dp))
+        Column(Modifier.padding(start = 10.dp).weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(SessionSummaryLogic.formatSessionDate(s.record.endedAtEpochMs), style = sumText(13.sp, FontWeight.Bold, c.text))
+                if (s.source == SessionSource.SEEDED) {
+                    Text(
+                        "Demo",
+                        style = sumText(9.sp, FontWeight.Bold, c.muted),
+                        modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(5.dp)).background(c.outline)
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+            }
+            Text(
+                "${s.record.repetitions} reps • ${s.record.peakRomDeg.toInt()}° peak • ${SessionSummaryLogic.formatDuration(s.durationMs)}",
+                style = sumText(12.sp, FontWeight.Normal, c.muted),
+            )
+        }
+        Text(comfort.text, style = sumText(12.sp, FontWeight.Bold, comfortColor), modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
 @Composable
 private fun SettingsButton(c: SummaryColors, onSettings: () -> Unit) {
     IconButton(
@@ -401,6 +520,7 @@ internal data class SummaryColors(
     val muted: Color,
     val chartGuide: Color,
     val chartPlaceholder: Color,
+    val selected: Color,
 )
 
 internal fun summaryColors(dark: Boolean) = if (dark) {
@@ -412,6 +532,7 @@ internal fun summaryColors(dark: Boolean) = if (dark) {
         muted = Color(0xFFB9C6C6),
         chartGuide = Color(0xFF3A4949),
         chartPlaceholder = Color(0xFF172020),
+        selected = Color(0xFF173B39),
     )
 } else {
     SummaryColors(
@@ -422,6 +543,7 @@ internal fun summaryColors(dark: Boolean) = if (dark) {
         muted = Color(0xFF5B5F58),
         chartGuide = Color(0xFFE4EAEB),
         chartPlaceholder = Color(0xFFF4F6F5),
+        selected = Color(0xFFE9F7F5),
     )
 }
 

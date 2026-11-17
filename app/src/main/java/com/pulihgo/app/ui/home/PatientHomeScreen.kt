@@ -50,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulihgo.app.R
+import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.ui.summary.UnderstandingEffortDialog
 import com.pulihgo.app.ui.theme.PulihGoTheme
 import java.time.DayOfWeek
@@ -68,9 +69,11 @@ data class HomeExerciseSession(
     val date: LocalDate,
     val repetitions: Int,
     val peakRomDegrees: Int,
-    val smoothnessPercent: Int,
+    /** Null when smoothness was not measured for the session. */
+    val smoothnessPercent: Int?,
     val exerciseName: String = "Forearm Rotation",
-    val time: LocalTime = LocalTime.of(7, 45)
+    val time: LocalTime = LocalTime.of(7, 45),
+    val painLevel: SessionPainLevel = SessionPainLevel.NO_PAIN,
 )
 
 private val Teal = Color(0xFF0D7C7C)
@@ -207,11 +210,12 @@ fun PatientHomeScreen(
                 // The additional sections in Figma's tall Home / Session / Expanded
                 // are BELOW the viewport. Keep all inside the scrollable LazyColumn.
                 if (selectedSessions.isNotEmpty()) {
-                    item(key = "coach") { ListeningToBody(colors) }
-                    item(key = "effort") { TimeToRest(colors, selectedSessions, onInfo = { showEffort = true }) }
+                    val worstPain = selectedSessions.maxOf { it.painLevel }
+                    item(key = "coach") { CoachCard(colors, worstPain) }
+                    item(key = "effort") { EffortCard(colors, worstPain, isToday, onInfo = { showEffort = true }) }
                     item(key = "alltime_title") { SectionHeading("All-Time Stats", colors) }
                     item(key = "alltime_stats") { AllTimeStats(colors, allSessions) }
-                    item(key = "session_logs_title") { SectionHeading("Today's Session Logs", colors) }
+                    item(key = "session_logs_title") { SectionHeading(if (isToday) "Today's Session Logs" else "Session Logs", colors) }
                     items(count = selectedSessions.size, key = { index -> "session_$index" }) { index ->
                         SessionLog(colors, selectedSessions.sortedByDescending { it.time }[index])
                     }
@@ -410,7 +414,8 @@ private fun WeeklyActivity(
 @Composable
 private fun TargetMetrics(c: HomePalette, sessions: List<HomeExerciseSession>) {
     val peak = sessions.maxOfOrNull { it.peakRomDegrees } ?: 0
-    val smooth = if (sessions.isEmpty()) 0 else sessions.map { it.smoothnessPercent }.average().toInt()
+    val measured = sessions.mapNotNull { it.smoothnessPercent }
+    val smooth = if (measured.isEmpty()) 0 else measured.average().toInt()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         MetricTile(c, "PEAK ROM", "$peak°", (peak / 180f).coerceIn(0f, 1f), Teal, Modifier.weight(1f))
         MetricTile(c, "SMOOTHNESS", "$smooth%", (smooth / 100f).coerceIn(0f, 1f), TealGreen, Modifier.weight(1f))
@@ -439,32 +444,42 @@ private fun MetricTile(c: HomePalette, label: String, value: String, progress: F
     }
 }
 
+/** Coach message follows the patient's own pain check for the selected day. */
 @Composable
-private fun ListeningToBody(c: HomePalette) {
-    Column(Modifier.fillMaxWidth().background(c.surface, CardShape)
+private fun CoachCard(c: HomePalette, worstPain: SessionPainLevel) {
+    val painFlagged = worstPain != SessionPainLevel.NO_PAIN
+    Column(Modifier.fillMaxWidth().background(if (painFlagged) c.surface else c.coachBackground, CardShape)
         .border(1.dp, c.outline, CardShape).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.pg_home_heart), null,
-                tint = Color(0xFFE96670), modifier = Modifier.size(20.dp))
+            Icon(painterResource(if (painFlagged) R.drawable.pg_home_heart else R.drawable.pg_home_check_circle), null,
+                tint = if (painFlagged) Color(0xFFE96670) else TealGreen, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Listening to Your Body", color = c.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(if (painFlagged) "Listening to Your Body" else "Moving Comfortably",
+                color = c.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Spacer(Modifier.height(9.dp))
-        Text("Good job stopping for discomfort; rest is essential for recovery.",
+        Text(
+            if (painFlagged) "Good job stopping for discomfort; rest is essential for recovery."
+            else "No pain was reported in these sessions. Keep moving at a steady, controlled pace.",
             color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
     }
 }
 
+/** Figma "Time to rest / TODAY'S EFFORT" card; the level comes from the pain check, not an estimate. */
 @Composable
-private fun TimeToRest(c: HomePalette, sessions: List<HomeExerciseSession>, onInfo: () -> Unit) {
-    val effortPosition = (sessions.sumOf { it.repetitions } / 20f).coerceIn(0f, 1f)
+private fun EffortCard(c: HomePalette, worstPain: SessionPainLevel, isToday: Boolean, onInfo: () -> Unit) {
+    val (title, tone, position) = when (worstPain) {
+        SessionPainLevel.NO_PAIN -> Triple("Safe pace", Color(0xFF22A268), 1f / 6f)
+        SessionPainLevel.MILD_PAIN -> Triple("Easier pace", Color(0xFFC77800), 0.5f)
+        SessionPainLevel.STOPPED_DUE_TO_PAIN -> Triple("Time to rest", AlertRed, 5f / 6f)
+    }
     Column(Modifier.fillMaxWidth().background(c.restingBackground, CardShape)
         .border(1.dp, c.outline, CardShape).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Time to rest", color = AlertRed, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = tone, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
-                Text("TODAY'S EFFORT", color = c.muted, fontSize = 10.sp,
+                Text(if (isToday) "TODAY'S EFFORT" else "DAY'S EFFORT", color = c.muted, fontSize = 10.sp,
                     fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp)
             }
             IconButton(onClick = onInfo, modifier = Modifier.size(40.dp)) {
@@ -480,16 +495,15 @@ private fun TimeToRest(c: HomePalette, sessions: List<HomeExerciseSession>, onIn
                 Box(Modifier.weight(1f).fillMaxSize().background(Color(0xFFE7AE34)))
                 Box(Modifier.weight(1f).fillMaxSize().background(Color(0xFFE55353)))
             }
-            // Decorative dot only: not a medically validated intensity classification.
             Canvas(Modifier.fillMaxSize()) {
                 val r = 5.dp.toPx()
-                val x = (size.width * effortPosition).coerceIn(r + 2.dp.toPx(), size.width - r - 2.dp.toPx())
+                val x = size.width * position
                 drawCircle(Color.White, radius = r + 1.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, size.height / 2))
-                drawCircle(AlertRed, radius = r, center = androidx.compose.ui.geometry.Offset(x, size.height / 2))
+                drawCircle(tone, radius = r, center = androidx.compose.ui.geometry.Offset(x, size.height / 2))
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text("Illustrative effort indicator · not medical advice", color = c.muted, fontSize = 10.sp)
+        Text("Based on your pain check after each session · not medical advice", color = c.muted, fontSize = 10.sp)
     }
 }
 
@@ -536,7 +550,7 @@ private fun SessionLog(c: HomePalette, session: HomeExerciseSession) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             LogMetric(session.repetitions.toString(), "REPS", c, Modifier.weight(1f))
             LogMetric("${session.peakRomDegrees}°", "ROM", c, Modifier.weight(1f))
-            LogMetric("${session.smoothnessPercent}%", "SMOOTHNESS", c, Modifier.weight(1f))
+            LogMetric(session.smoothnessPercent?.let { "$it%" } ?: "—", "SMOOTHNESS", c, Modifier.weight(1f))
         }
     }
 }
