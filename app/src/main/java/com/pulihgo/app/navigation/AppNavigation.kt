@@ -31,6 +31,7 @@ import com.pulihgo.app.data.exercise.ExerciseCatalog
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
 import com.pulihgo.app.data.session.SessionPainLevel
+import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.account.ForgotPasswordScreen
 import com.pulihgo.app.ui.account.LoginScreen
@@ -44,6 +45,9 @@ import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.LiveExerciseScreen
 import com.pulihgo.app.ui.therapist.TherapistHomeScreen
+import com.pulihgo.app.ui.therapist.TherapistPatientDetailHandoff
+import com.pulihgo.app.ui.therapist.TherapistPatientListLogic
+import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -93,6 +97,7 @@ fun AppNavigation(
     var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
     var lastSavedPainLevel by remember { mutableStateOf<SessionPainLevel?>(null) }
     var draftEmail by rememberSaveable { mutableStateOf("") }
+    var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     // UI-only exercise data until the sensor/session repository is integrated.
     var demoSessionCompleted by rememberSaveable { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
@@ -121,6 +126,7 @@ fun AppNavigation(
         currentUser = null
         demoSessionCompleted = false
         selectedExerciseId = null
+        selectedTherapistPatientId = null
         draftEmail = ""
         resetTo(AppRoute.LOGIN)
     }
@@ -143,6 +149,24 @@ fun AppNavigation(
             )
         } else {
             realMapped
+        }
+    }
+
+    // Therapist Patient List rows: only this therapist's patients, with sessions saved
+    // on this device. Sessions are stored under the patient's user id (see SENSOR_CHECK).
+    // Re-read whenever the back stack changes so returning to the list shows fresh data.
+    val therapistPatientItems = remember(user?.id, backStack) {
+        val therapist = user
+        if (therapist == null || therapist.role != Role.THERAPIST) {
+            emptyList()
+        } else {
+            val assigned = dataSource.loadPatients().filter { it.therapistId == therapist.id }
+            TherapistPatientListLogic.buildItems(
+                therapistId = therapist.id,
+                patients = assigned,
+                users = auth.demoAccounts(),
+                sessionsByUserId = assigned.associate { it.userId to exerciseSessionStore.read(it.userId) },
+            )
         }
     }
 
@@ -325,6 +349,25 @@ fun AppNavigation(
             },
             users = auth.demoAccounts(),
             onLogout = { logout() },
+            onOpenPatients = { navigate(AppRoute.THERAPIST_PATIENTS) },
+        )
+
+        // PGF-THR-03: Patient List & Search.
+        AppRoute.THERAPIST_PATIENTS -> TherapistPatientListScreen(
+            therapistName = user?.fullName.orEmpty(),
+            items = therapistPatientItems,
+            isDark = isDark,
+            onOpenDashboard = { resetTo(AppRoute.THERAPIST_HOME) },
+            onViewPatient = { patientId ->
+                selectedTherapistPatientId = patientId
+                navigate(AppRoute.THERAPIST_PATIENT_DETAIL)
+            },
+        )
+
+        // Temporary handoff until PGF-THR-04 (Patient Detail) lands.
+        AppRoute.THERAPIST_PATIENT_DETAIL -> TherapistPatientDetailHandoff(
+            patient = therapistPatientItems.firstOrNull { it.patientId == selectedTherapistPatientId },
+            onBack = { goBack() },
         )
     }
 }

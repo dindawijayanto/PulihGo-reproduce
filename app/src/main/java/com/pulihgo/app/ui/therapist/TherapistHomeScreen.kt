@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,6 +27,7 @@ fun TherapistHomeScreen(
     patients: List<Patient>,
     users: List<User>,
     onLogout: () -> Unit,
+    onOpenPatients: () -> Unit = {},
 ) {
     val namesByUserId = users.associate { it.id to it.fullName }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -50,6 +52,10 @@ fun TherapistHomeScreen(
                     }
                 }
             }
+            Button(
+                onClick = onOpenPatients,
+                modifier = Modifier.fillMaxWidth().testTag("open_patient_list"),
+            ) { Text("My Patients") }
             OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Keluar") }
         }
     }

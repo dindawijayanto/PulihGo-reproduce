@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exported from Figma "Screen 03 - Therapist / Patient List" (PGF-THR-03). Tinted at use site. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="12dp" android:height="8dp" android:viewportWidth="12" android:viewportHeight="8">
+  <path android:pathData="M0,8V6.66667H4V8H0ZM0,4.66667V3.33333H8V4.66667H0ZM0,1.33333V0H12V1.33333H0Z" android:fillColor="#FFFFFFFF" />
+</vector>
