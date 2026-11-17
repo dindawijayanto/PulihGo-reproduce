@@ -30,6 +30,8 @@ import com.pulihgo.app.data.MockDataSource
 import com.pulihgo.app.data.exercise.ExerciseCatalog
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
+import com.pulihgo.app.data.session.PatientSessionHistory
+import com.pulihgo.app.data.session.SeededSessionSource
 import com.pulihgo.app.data.session.SessionPainLevel
 import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
@@ -44,10 +46,13 @@ import com.pulihgo.app.ui.onboarding.OnboardingScreen
 import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.LiveExerciseScreen
-import com.pulihgo.app.ui.therapist.TherapistHomeScreen
+import com.pulihgo.app.ui.therapist.ExerciseTarget
+import com.pulihgo.app.ui.therapist.TherapistDashboardLogic
+import com.pulihgo.app.ui.therapist.TherapistDashboardScreen
 import com.pulihgo.app.ui.therapist.TherapistPatientDetailHandoff
 import com.pulihgo.app.ui.therapist.TherapistPatientListLogic
 import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
+import com.pulihgo.app.ui.therapist.TherapistTab
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -93,6 +98,15 @@ fun AppNavigation(
         runCatching { ExerciseCatalog(context.applicationContext).loadExercises() }
             .getOrDefault(emptyList())
     }
+    val allPatients = remember { dataSource.loadPatients() }
+    // Seeded demo history (assets/mock_data/sessions.json), re-keyed to patient user ids.
+    val seededSessions = remember {
+        SeededSessionSource(context.applicationContext).load(allPatients.associate { it.id to it.userId })
+    }
+    val exerciseTargets = remember(exercises) {
+        exercises.associate { it.id to ExerciseTarget(it.name, it.targetRomDeg, it.romCeilingDeg) }
+    }
+    var therapistRefreshTick by remember { mutableStateOf(0) }
 
     var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
     var lastSavedPainLevel by remember { mutableStateOf<SessionPainLevel?>(null) }
@@ -152,22 +166,45 @@ fun AppNavigation(
         }
     }
 
-    // Therapist Patient List rows: only this therapist's patients, with sessions saved
-    // on this device. Sessions are stored under the patient's user id (see SENSOR_CHECK).
-    // Re-read whenever the back stack changes so returning to the list shows fresh data.
-    val therapistPatientItems = remember(user?.id, backStack) {
+    // Therapist portal data: only this therapist's patients, with seeded history plus
+    // sessions saved on this device (stored under the patient's user id, see SENSOR_CHECK).
+    // Re-read whenever the back stack changes or Refresh is tapped.
+    val therapistCohort = remember(user?.id, backStack, therapistRefreshTick) {
         val therapist = user
         if (therapist == null || therapist.role != Role.THERAPIST) {
             emptyList()
         } else {
-            val assigned = dataSource.loadPatients().filter { it.therapistId == therapist.id }
-            TherapistPatientListLogic.buildItems(
+            val assigned = allPatients.filter { it.therapistId == therapist.id }
+            TherapistDashboardLogic.assemble(
                 therapistId = therapist.id,
                 patients = assigned,
                 users = auth.demoAccounts(),
-                sessionsByUserId = assigned.associate { it.userId to exerciseSessionStore.read(it.userId) },
+                sessionsByUserId = assigned.associate {
+                    it.userId to PatientSessionHistory.merge(seededSessions, exerciseSessionStore.read(it.userId), it.userId)
+                },
             )
         }
+    }
+    val therapistPatientItems = remember(therapistCohort) {
+        val therapist = user
+        if (therapist == null) emptyList() else TherapistPatientListLogic.buildItems(
+            therapistId = therapist.id,
+            patients = therapistCohort.map { it.patient },
+            users = auth.demoAccounts(),
+            sessionsByUserId = therapistCohort.associate { p -> p.patient.userId to p.sessions.map { it.record } },
+        )
+    }
+
+    fun openTherapistTab(tab: TherapistTab) {
+        resetTo(AppRoute.THERAPIST_HOME)
+        when (tab) {
+            TherapistTab.THERAPY -> navigate(AppRoute.THERAPIST_PATIENTS)
+            else -> Unit
+        }
+    }
+    fun openTherapistPatient(patientId: String) {
+        selectedTherapistPatientId = patientId
+        navigate(AppRoute.THERAPIST_PATIENT_DETAIL)
     }
 
     when (route) {
@@ -342,14 +379,18 @@ fun AppNavigation(
             },
         )
 
-        AppRoute.THERAPIST_HOME -> TherapistHomeScreen(
-            therapist = user,
-            patients = remember(user?.id) {
-                dataSource.loadPatients().filter { it.therapistId == user?.id }
+        // PGF-THR-02: Therapist Dashboard is the therapist's home.
+        AppRoute.THERAPIST_HOME -> TherapistDashboardScreen(
+            therapistName = user?.fullName.orEmpty(),
+            summary = remember(therapistCohort, exerciseTargets) {
+                TherapistDashboardLogic.summarize(therapistCohort, exerciseTargets, LocalDate.now())
             },
-            users = auth.demoAccounts(),
+            isDark = isDark,
+            today = LocalDate.now(),
+            onNavigate = ::openTherapistTab,
             onLogout = { logout() },
-            onOpenPatients = { navigate(AppRoute.THERAPIST_PATIENTS) },
+            onRefresh = { therapistRefreshTick++ },
+            onViewPatient = ::openTherapistPatient,
         )
 
         // PGF-THR-03: Patient List & Search.
@@ -357,11 +398,9 @@ fun AppNavigation(
             therapistName = user?.fullName.orEmpty(),
             items = therapistPatientItems,
             isDark = isDark,
-            onOpenDashboard = { resetTo(AppRoute.THERAPIST_HOME) },
-            onViewPatient = { patientId ->
-                selectedTherapistPatientId = patientId
-                navigate(AppRoute.THERAPIST_PATIENT_DETAIL)
-            },
+            onNavigate = ::openTherapistTab,
+            onLogout = { logout() },
+            onViewPatient = ::openTherapistPatient,
         )
 
         // Temporary handoff until PGF-THR-04 (Patient Detail) lands.

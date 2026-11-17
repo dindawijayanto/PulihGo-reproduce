@@ -14,7 +14,7 @@ import java.util.Locale
  *
  * Data honesty rules:
  * - Only seeded patients assigned to the therapist are listed; nothing is invented.
- * - Session metrics come from [ExerciseSessionRecord]s saved on this device.
+ * - Session metrics come from [ExerciseSessionRecord]s (seeded history + this device).
  *   Records are keyed by the patient's *user* id (see AppNavigation SENSOR_CHECK),
  *   so callers must group them by [Patient.userId].
  * - "Needs follow-up" only means the latest saved session carried a pain report.
