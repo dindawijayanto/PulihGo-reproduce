@@ -59,7 +59,7 @@ enum class TherapistTab(val label: String) {
 }
 
 /** Settings belongs to PGF-THR-01 (Dinda) and is shown but not navigable yet. */
-internal val EnabledTherapistTabs = setOf(TherapistTab.DASHBOARD, TherapistTab.THERAPY)
+internal val EnabledTherapistTabs = setOf(TherapistTab.DASHBOARD, TherapistTab.THERAPY, TherapistTab.REPORTS)
 
 @Composable
 internal fun ClinicalHeader(
