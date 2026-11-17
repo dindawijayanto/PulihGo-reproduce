@@ -49,7 +49,7 @@ fun TherapistPatientDetailHandoff(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "${patient.sessionCount} session(s) saved on this device.",
+                    "${patient.sessionCount} ${if (patient.sessionCount == 1) "session" else "sessions"} on record (seeded history + this device).",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
@@ -58,7 +58,7 @@ fun TherapistPatientDetailHandoff(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back to My Patients") }
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
         }
     }
 }
