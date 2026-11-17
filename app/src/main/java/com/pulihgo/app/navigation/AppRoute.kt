@@ -12,7 +12,7 @@ enum class AppRoute(val allowedRoles: Set<Role>) {
 
     PATIENT_HOME(setOf(Role.PATIENT)),
     PATIENT_SETTINGS(setOf(Role.PATIENT)),
-    PATIENT_SUMMARY_DEMO(setOf(Role.PATIENT)),
+    PATIENT_SUMMARY(setOf(Role.PATIENT)),
     PATIENT_EXERCISES(setOf(Role.PATIENT)),
     PATIENT_EXERCISE_PREPARATION(setOf(Role.PATIENT)),
     SENSOR_CHECK(setOf(Role.PATIENT)),

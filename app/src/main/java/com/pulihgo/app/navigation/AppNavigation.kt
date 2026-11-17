@@ -2,17 +2,6 @@ package com.pulihgo.app.navigation
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,9 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import com.pulihgo.app.auth.AuthRepository
 import com.pulihgo.app.auth.LoginResult
 import com.pulihgo.app.auth.SessionStore
@@ -46,6 +33,7 @@ import com.pulihgo.app.ui.onboarding.OnboardingScreen
 import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.LiveExerciseScreen
+import com.pulihgo.app.ui.summary.PatientSessionSummaryScreen
 import com.pulihgo.app.ui.therapist.ExerciseTarget
 import com.pulihgo.app.ui.therapist.TherapistDashboardLogic
 import com.pulihgo.app.ui.therapist.TherapistDashboardScreen
@@ -55,7 +43,6 @@ import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
 import com.pulihgo.app.ui.therapist.TherapistTab
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneId
 
 private const val PREF_FILE = "pulihgo_local_prefs"
@@ -112,8 +99,6 @@ fun AppNavigation(
     var lastSavedPainLevel by remember { mutableStateOf<SessionPainLevel?>(null) }
     var draftEmail by rememberSaveable { mutableStateOf("") }
     var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
-    // UI-only exercise data until the sensor/session repository is integrated.
-    var demoSessionCompleted by rememberSaveable { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
@@ -138,7 +123,6 @@ fun AppNavigation(
     fun logout() {
         sessionStore.currentUserId = null
         currentUser = null
-        demoSessionCompleted = false
         selectedExerciseId = null
         selectedTherapistPatientId = null
         draftEmail = ""
@@ -150,20 +134,15 @@ fun AppNavigation(
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
 
-    val storedRecords = remember(user?.id, lastSavedPainLevel, demoSessionCompleted) {
+    val storedRecords = remember(user?.id, lastSavedPainLevel) {
         if (user != null) exerciseSessionStore.read(user.id) else emptyList()
     }
-    val homeSessions = remember(storedRecords, demoSessionCompleted) {
-        val realMapped = storedRecords.map { it.toHomeExerciseSession() }
-        if (demoSessionCompleted && realMapped.isEmpty()) {
-            listOf(
-                HomeExerciseSession(LocalDate.now(), 4, 62, 84, time = LocalTime.of(7, 45)),
-                HomeExerciseSession(LocalDate.now(), 5, 75, 86, time = LocalTime.of(7, 51)),
-                HomeExerciseSession(LocalDate.now(), 3, 68, 88, time = LocalTime.of(7, 56)),
-            )
-        } else {
-            realMapped
-        }
+    val homeSessions = remember(storedRecords) { storedRecords.map { it.toHomeExerciseSession() } }
+    // Patient's own sessions (seeded history + this device), newest first.
+    val patientSessions = remember(user?.id, storedRecords) {
+        val patientUser = user
+        if (patientUser == null || patientUser.role != Role.PATIENT) emptyList()
+        else PatientSessionHistory.merge(seededSessions, storedRecords, patientUser.id)
     }
 
     // Therapist portal data: only this therapist's patients, with seeded history plus
@@ -227,7 +206,6 @@ fun AppNavigation(
                         sessionStore.currentUserId =
                             result.user.id.takeUnless { it.startsWith("U_LOCAL_") }
                         currentUser = result.user
-                        demoSessionCompleted = false
                         resetTo(RoleRouter.homeFor(result.user.role))
                         null
                     }
@@ -269,7 +247,7 @@ fun AppNavigation(
             sessions = homeSessions,
             onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
             onStartExercise = { navigate(AppRoute.PATIENT_EXERCISES) },
-            onOpenSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+            onOpenSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
             isDark = isDark,
         )
 
@@ -292,7 +270,7 @@ fun AppNavigation(
             },
             onBack = { goBack() },
             onHome = { resetTo(AppRoute.PATIENT_HOME) },
-            onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+            onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
             onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
             isDark = isDark,
         )
@@ -320,7 +298,7 @@ fun AppNavigation(
                     },
                     onBack = { goBack() },
                     onHome = { resetTo(AppRoute.PATIENT_HOME) },
-                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
                     onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
                     isDark = isDark,
                 )
@@ -359,25 +337,27 @@ fun AppNavigation(
                     },
                     onBack = { goBack() },
                     onHome = { resetTo(AppRoute.PATIENT_HOME) },
-                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY_DEMO) },
+                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
                     onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
                     isDark = isDark,
                 )
             }
         }
 
-        AppRoute.PATIENT_SUMMARY_DEMO -> SummaryDemoHandoff(
-            hasDemoSessions = demoSessionCompleted,
-            onBack = { goBack() },
-            onSimulate = {
-                demoSessionCompleted = true
-                resetTo(AppRoute.PATIENT_HOME)
-            },
-            onReset = {
-                demoSessionCompleted = false
-                resetTo(AppRoute.PATIENT_HOME)
-            },
-        )
+        // PGF-PRO-02: Session Summary of the latest session.
+        AppRoute.PATIENT_SUMMARY -> {
+            val latest = patientSessions.firstOrNull()
+            val exercise = exercises.firstOrNull { it.id == latest?.record?.exerciseId }
+            PatientSessionSummaryScreen(
+                session = latest,
+                exerciseName = exercise?.name,
+                romCeilingDeg = exercise?.romCeilingDeg,
+                isDark = isDark,
+                onHome = { resetTo(AppRoute.PATIENT_HOME) },
+                onExercise = { navigate(AppRoute.PATIENT_EXERCISES) },
+                onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+            )
+        }
 
         // PGF-THR-02: Therapist Dashboard is the therapist's home.
         AppRoute.THERAPIST_HOME -> TherapistDashboardScreen(
@@ -408,44 +388,5 @@ fun AppNavigation(
             patient = therapistPatientItems.firstOrNull { it.patientId == selectedTherapistPatientId },
             onBack = { goBack() },
         )
-    }
-}
-
-/** Temporary summary handoff; never labels simulated data as real sensor readings. */
-@Composable
-private fun SummaryDemoHandoff(
-    hasDemoSessions: Boolean,
-    onBack: () -> Unit,
-    onSimulate: () -> Unit,
-    onReset: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
-        Column(
-            modifier = Modifier.safeDrawingPadding().padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("Session Summary — UI Demo", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "No real session records are stored yet. Exercise measurements and the final summary are managed by the team's upcoming integration.",
-                modifier = Modifier.padding(vertical = 20.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(if (hasDemoSessions) "Synthetic demo sessions: ON" else "Synthetic demo sessions: OFF")
-            Button(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                onClick = onSimulate,
-            ) { Text("Simulate Completed Sessions") }
-            OutlinedButton(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                onClick = onReset,
-            ) { Text("Clear Demo Sessions") }
-            OutlinedButton(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                onClick = onBack,
-            ) { Text("Back to Patient Home") }
-        }
     }
 }

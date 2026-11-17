@@ -50,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulihgo.app.R
+import com.pulihgo.app.ui.summary.UnderstandingEffortDialog
 import com.pulihgo.app.ui.theme.PulihGoTheme
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -149,6 +150,7 @@ fun PatientHomeScreen(
     var expanded by rememberSaveable { mutableStateOf(false) }
     var selectedDayOffset by rememberSaveable { mutableIntStateOf(0) }
     var weekOffset by rememberSaveable { mutableIntStateOf(0) }
+    var showEffort by rememberSaveable { mutableStateOf(false) }
     val selectedDate = today.plusDays(selectedDayOffset.toLong())
     val displayedWeekStart = monday(today).plusWeeks(weekOffset.toLong())
     val selectedSessions = sessions.filter { it.date == selectedDate }
@@ -206,7 +208,7 @@ fun PatientHomeScreen(
                 // are BELOW the viewport. Keep all inside the scrollable LazyColumn.
                 if (selectedSessions.isNotEmpty()) {
                     item(key = "coach") { ListeningToBody(colors) }
-                    item(key = "effort") { TimeToRest(colors, selectedSessions) }
+                    item(key = "effort") { TimeToRest(colors, selectedSessions, onInfo = { showEffort = true }) }
                     item(key = "alltime_title") { SectionHeading("All-Time Stats", colors) }
                     item(key = "alltime_stats") { AllTimeStats(colors, allSessions) }
                     item(key = "session_logs_title") { SectionHeading("Today's Session Logs", colors) }
@@ -220,6 +222,7 @@ fun PatientHomeScreen(
         }
         BottomTabs(colors, onExercise = onStartExercise, onSummary = onOpenSummary)
     }
+    if (showEffort) UnderstandingEffortDialog(isDark = isDark, onDismiss = { showEffort = false })
 }
 
 @Composable
@@ -453,7 +456,7 @@ private fun ListeningToBody(c: HomePalette) {
 }
 
 @Composable
-private fun TimeToRest(c: HomePalette, sessions: List<HomeExerciseSession>) {
+private fun TimeToRest(c: HomePalette, sessions: List<HomeExerciseSession>, onInfo: () -> Unit) {
     val effortPosition = (sessions.sumOf { it.repetitions } / 20f).coerceIn(0f, 1f)
     Column(Modifier.fillMaxWidth().background(c.restingBackground, CardShape)
         .border(1.dp, c.outline, CardShape).padding(16.dp)) {
@@ -464,9 +467,11 @@ private fun TimeToRest(c: HomePalette, sessions: List<HomeExerciseSession>) {
                 Text("TODAY'S EFFORT", color = c.muted, fontSize = 10.sp,
                     fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp)
             }
-            Icon(painterResource(R.drawable.pg_home_info),
-                contentDescription = "Effort indicator is a demo estimate",
-                tint = c.muted, modifier = Modifier.size(17.dp))
+            IconButton(onClick = onInfo, modifier = Modifier.size(40.dp)) {
+                Icon(painterResource(R.drawable.pg_home_info),
+                    contentDescription = "Understanding effort",
+                    tint = c.muted, modifier = Modifier.size(17.dp))
+            }
         }
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth().height(14.dp), contentAlignment = Alignment.CenterStart) {
