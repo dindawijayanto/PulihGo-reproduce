@@ -34,6 +34,7 @@ import com.pulihgo.app.ui.patient.PatientExerciseLibraryScreen
 import com.pulihgo.app.ui.patient.PatientExercisePreparationScreen
 import com.pulihgo.app.ui.sensor.LiveExerciseScreen
 import com.pulihgo.app.ui.summary.PatientSessionSummaryScreen
+import com.pulihgo.app.ui.summary.SessionHistoryLogic
 import com.pulihgo.app.ui.therapist.ExerciseTarget
 import com.pulihgo.app.ui.therapist.TherapistDashboardLogic
 import com.pulihgo.app.ui.therapist.TherapistDashboardScreen
@@ -54,9 +55,10 @@ private fun ExerciseSessionRecord.toHomeExerciseSession(): HomeExerciseSession {
         date = zdt.toLocalDate(),
         repetitions = repetitions,
         peakRomDegrees = peakRomDeg.toInt(),
-        smoothnessPercent = ((averageSmoothness ?: 0.0) * 100).toInt(),
+        smoothnessPercent = averageSmoothness?.let { (it * 100).toInt() },
         exerciseName = "Forearm Rotation",
         time = zdt.toLocalTime(),
+        painLevel = painLevel,
     )
 }
 
@@ -99,6 +101,7 @@ fun AppNavigation(
     var lastSavedPainLevel by remember { mutableStateOf<SessionPainLevel?>(null) }
     var draftEmail by rememberSaveable { mutableStateOf("") }
     var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedSummarySessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
@@ -125,6 +128,7 @@ fun AppNavigation(
         currentUser = null
         selectedExerciseId = null
         selectedTherapistPatientId = null
+        selectedSummarySessionId = null
         draftEmail = ""
         resetTo(AppRoute.LOGIN)
     }
@@ -137,13 +141,13 @@ fun AppNavigation(
     val storedRecords = remember(user?.id, lastSavedPainLevel) {
         if (user != null) exerciseSessionStore.read(user.id) else emptyList()
     }
-    val homeSessions = remember(storedRecords) { storedRecords.map { it.toHomeExerciseSession() } }
-    // Patient's own sessions (seeded history + this device), newest first.
+    // PGF-PRO-03: the patient's own sessions (seeded history + this device), newest first.
     val patientSessions = remember(user?.id, storedRecords) {
         val patientUser = user
         if (patientUser == null || patientUser.role != Role.PATIENT) emptyList()
         else PatientSessionHistory.merge(seededSessions, storedRecords, patientUser.id)
     }
+    val homeSessions = remember(patientSessions) { patientSessions.map { it.record.toHomeExerciseSession() } }
 
     // Therapist portal data: only this therapist's patients, with seeded history plus
     // sessions saved on this device (stored under the patient's user id, see SENSOR_CHECK).
@@ -174,6 +178,11 @@ fun AppNavigation(
         )
     }
 
+    /** Summary tab always opens on the newest session. */
+    fun openPatientSummary() {
+        selectedSummarySessionId = null
+        navigate(AppRoute.PATIENT_SUMMARY)
+    }
     fun openTherapistTab(tab: TherapistTab) {
         resetTo(AppRoute.THERAPIST_HOME)
         when (tab) {
@@ -247,7 +256,7 @@ fun AppNavigation(
             sessions = homeSessions,
             onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
             onStartExercise = { navigate(AppRoute.PATIENT_EXERCISES) },
-            onOpenSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
+            onOpenSummary = { openPatientSummary() },
             isDark = isDark,
         )
 
@@ -270,7 +279,7 @@ fun AppNavigation(
             },
             onBack = { goBack() },
             onHome = { resetTo(AppRoute.PATIENT_HOME) },
-            onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
+            onSummary = { openPatientSummary() },
             onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
             isDark = isDark,
         )
@@ -298,7 +307,7 @@ fun AppNavigation(
                     },
                     onBack = { goBack() },
                     onHome = { resetTo(AppRoute.PATIENT_HOME) },
-                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
+                    onSummary = { openPatientSummary() },
                     onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
                     isDark = isDark,
                 )
@@ -337,25 +346,27 @@ fun AppNavigation(
                     },
                     onBack = { goBack() },
                     onHome = { resetTo(AppRoute.PATIENT_HOME) },
-                    onSummary = { navigate(AppRoute.PATIENT_SUMMARY) },
+                    onSummary = { openPatientSummary() },
                     onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
                     isDark = isDark,
                 )
             }
         }
 
-        // PGF-PRO-02: Session Summary of the latest session.
+        // PGF-PRO-02 Session Summary + PGF-PRO-03 Progress & Session History.
         AppRoute.PATIENT_SUMMARY -> {
-            val latest = patientSessions.firstOrNull()
-            val exercise = exercises.firstOrNull { it.id == latest?.record?.exerciseId }
+            val shown = SessionHistoryLogic.selected(patientSessions, selectedSummarySessionId)
+            val exercise = exercises.firstOrNull { it.id == shown?.record?.exerciseId }
             PatientSessionSummaryScreen(
-                session = latest,
+                session = shown,
                 exerciseName = exercise?.name,
                 romCeilingDeg = exercise?.romCeilingDeg,
                 isDark = isDark,
                 onHome = { resetTo(AppRoute.PATIENT_HOME) },
                 onExercise = { navigate(AppRoute.PATIENT_EXERCISES) },
                 onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
+                history = patientSessions,
+                onSelectSession = { selectedSummarySessionId = it },
             )
         }
 
