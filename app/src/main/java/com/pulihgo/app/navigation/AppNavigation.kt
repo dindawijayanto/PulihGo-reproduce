@@ -41,6 +41,7 @@ import com.pulihgo.app.ui.therapist.TherapistDashboardScreen
 import com.pulihgo.app.ui.therapist.TherapistPatientDetailHandoff
 import com.pulihgo.app.ui.therapist.TherapistPatientListLogic
 import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
+import com.pulihgo.app.ui.therapist.TherapistReportsScreen
 import com.pulihgo.app.ui.therapist.TherapistTab
 import java.time.Instant
 import java.time.LocalDate
@@ -93,7 +94,7 @@ fun AppNavigation(
         SeededSessionSource(context.applicationContext).load(allPatients.associate { it.id to it.userId })
     }
     val exerciseTargets = remember(exercises) {
-        exercises.associate { it.id to ExerciseTarget(it.name, it.targetRomDeg, it.romCeilingDeg) }
+        exercises.associate { it.id to ExerciseTarget(it.name, it.targetRomDeg, it.romCeilingDeg, it.targetReps) }
     }
     var therapistRefreshTick by remember { mutableStateOf(0) }
 
@@ -102,6 +103,7 @@ fun AppNavigation(
     var draftEmail by rememberSaveable { mutableStateOf("") }
     var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedSummarySessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedReportsPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
@@ -129,6 +131,7 @@ fun AppNavigation(
         selectedExerciseId = null
         selectedTherapistPatientId = null
         selectedSummarySessionId = null
+        selectedReportsPatientId = null
         draftEmail = ""
         resetTo(AppRoute.LOGIN)
     }
@@ -187,6 +190,7 @@ fun AppNavigation(
         resetTo(AppRoute.THERAPIST_HOME)
         when (tab) {
             TherapistTab.THERAPY -> navigate(AppRoute.THERAPIST_PATIENTS)
+            TherapistTab.REPORTS -> navigate(AppRoute.THERAPIST_REPORTS)
             else -> Unit
         }
     }
@@ -392,6 +396,20 @@ fun AppNavigation(
             onNavigate = ::openTherapistTab,
             onLogout = { logout() },
             onViewPatient = ::openTherapistPatient,
+        )
+
+        // PGF-THR-06: Reports UI for one selected patient.
+        AppRoute.THERAPIST_REPORTS -> TherapistReportsScreen(
+            therapistName = user?.fullName.orEmpty(),
+            patients = therapistCohort,
+            selectedPatientId = selectedReportsPatientId,
+            exercises = exerciseTargets,
+            isDark = isDark,
+            today = LocalDate.now(),
+            onSelectPatient = { selectedReportsPatientId = it },
+            onNavigate = ::openTherapistTab,
+            onLogout = { logout() },
+            onRefresh = { therapistRefreshTick++ },
         )
 
         // Temporary handoff until PGF-THR-04 (Patient Detail) lands.

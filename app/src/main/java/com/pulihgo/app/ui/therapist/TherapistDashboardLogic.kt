@@ -11,7 +11,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /** Exercise parameters used to judge ROM against the prescription (from exercises.json). */
-data class ExerciseTarget(val name: String, val targetRomDeg: Double, val romCeilingDeg: Double)
+data class ExerciseTarget(val name: String, val targetRomDeg: Double, val romCeilingDeg: Double, val targetReps: Int = 0)
 
 /** One patient with every session we know about (seeded + device), newest first. */
 data class TherapistPatientSessions(
