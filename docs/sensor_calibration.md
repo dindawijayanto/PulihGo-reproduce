@@ -87,3 +87,20 @@ Unit test (`app/src/test/java/com/pulihgo/app/sensor/`):
 - `CalibratedAngleControllerTest`: alur end-to-end dari pembacaan, kalibrasi, sampai sudut relatif melewati ±180°.
 
 Uji perangkat (masuk PGF-INT-04): buka **Cek Sensor & Kalibrasi**, pastikan status "Sensor terhubung ~50 Hz", lalu kalibrasi. Roll harus ≈ 0°, supinasi menghasilkan nilai positif atau negatif yang konsisten, dan nilai tidak lompat saat melewati ±180°.
+
+### 7. PGF-SEN-03 — Live Exercise
+
+`LiveExerciseScreen` (Figma P10/P19/P20) sekarang ambil semua angkanya dari `sensor/LiveExerciseTracker.kt`, class Kotlin murni tanpa Android, jadi bisa dites di JVM. Inputnya **hanya** sudut roll yang sudah dikalibrasi, dan cuma diproses saat status `Calibrated` + `Streaming`.
+
+| Tampilan | Sumber |
+|---|---|
+| Sudut real-time (angka di ring) | `currentRomDeg` = \|roll\| terhadap baseline 0° hasil kalibrasi |
+| PEAK ANGLE | `peakRomDeg`, nilai maksimum selama sesi |
+| REPETITIONS | `RepetitionDetector` (REP-02..04), plus metrik per repetisi + smoothness (QS-01) |
+| Baseline (ring teal, P10) | `LivePhase.BASELINE`, selama belum mencapai target |
+| Target hit (ring hijau, P19) | `LivePhase.TARGET_HIT`: aktif saat \|roll\| ≥ target, tetap aktif selama gerakan kembali, hilang saat detector kembali IDLE (repetisi selesai) |
+| Lewat ceiling (ring merah, P20) | `LivePhase.CEILING_EXCEEDED`: \|roll\| ≥ ceiling, mengalahkan target hit |
+
+Target dan ceiling dibaca dari `exercises.json` (EX001: 70° / 80°). Kalau konfigurasinya tidak valid (ceiling ≤ target), tracker bernilai `null` dan layar menampilkan "Exercise parameters unavailable", tanpa menebak nilai. Kalau sensor `Stalled`/`NoData` di tengah sesi, layar menampilkan "Sensor reading paused" (bukan pesan kalibrasi).
+
+Pengujian: `LiveExerciseTrackerTest` (12 tes). Uji di perangkat masuk PGF-INT-04.
