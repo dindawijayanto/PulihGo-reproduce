@@ -58,8 +58,7 @@ enum class TherapistTab(val label: String) {
     SETTINGS("Settings"),
 }
 
-/** Settings belongs to PGF-THR-01 (Dinda) and is shown but not navigable yet. */
-internal val EnabledTherapistTabs = setOf(TherapistTab.DASHBOARD, TherapistTab.THERAPY, TherapistTab.REPORTS)
+internal val EnabledTherapistTabs = TherapistTab.entries.toSet()
 
 @Composable
 internal fun ClinicalHeader(
@@ -118,6 +117,16 @@ internal fun ClinicalHeader(
                     Icon(painterResource(R.drawable.pg_thr_user), contentDescription = null, tint = c.onAccent, modifier = Modifier.size(13.dp))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (selected != TherapistTab.SETTINGS) {
+                        DropdownMenuItem(
+                            text = { Text("Settings", style = thrText(14.sp, FontWeight.Medium, Color.Unspecified)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.pg_home_settings), null, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                menuOpen = false
+                                onNavigate(TherapistTab.SETTINGS)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Log out", style = thrText(14.sp, FontWeight.Medium, Color.Unspecified)) },
                         leadingIcon = { Icon(painterResource(R.drawable.pg_icon_logout), null, modifier = Modifier.size(18.dp)) },
