@@ -3,10 +3,16 @@ package com.pulihgo.app.auth
 import android.content.Context
 import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
+import com.pulihgo.app.ui.account.AccountValidation
 
 sealed interface LoginResult {
     data class Success(val user: User) : LoginResult
     data class Failure(val message: String) : LoginResult
+}
+
+sealed interface PasswordChangeResult {
+    data object Success : PasswordChangeResult
+    data class Failure(val message: String) : PasswordChangeResult
 }
 
 /**
@@ -16,6 +22,7 @@ sealed interface LoginResult {
  */
 class AuthRepository(private val users: List<User>) {
     private val registeredPatients = mutableListOf<User>()
+    private val passwordOverrides = mutableMapOf<String, String>()
     private val allUsers: List<User> get() = users + registeredPatients
 
     fun login(identifier: String, password: String): LoginResult {
@@ -27,12 +34,38 @@ class AuthRepository(private val users: List<User>) {
             it.username.lowercase() == key || it.email.lowercase() == key
         }
         return when {
-            user == null || user.password != password ->
+            user == null || passwordOf(user) != password ->
                 LoginResult.Failure("Username/email atau password salah.")
             !user.isActive -> LoginResult.Failure("Akun ini tidak aktif.")
             else -> LoginResult.Success(user)
         }
     }
+
+    fun loginTherapist(identifier: String, password: String): LoginResult =
+        when (val result = login(identifier, password)) {
+            is LoginResult.Success ->
+                if (result.user.role == Role.THERAPIST) result
+                else LoginResult.Failure("This portal is for therapist accounts only.")
+            is LoginResult.Failure -> result
+        }
+
+    fun changePassword(userId: String, current: String, new: String, confirmation: String): PasswordChangeResult {
+        val user = findActiveUser(userId) ?: return PasswordChangeResult.Failure("Account not found.")
+        return when {
+            current != passwordOf(user) -> PasswordChangeResult.Failure("Current password is incorrect.")
+            new.length < 8 -> PasswordChangeResult.Failure("New password must be at least 8 characters.")
+            !AccountValidation.containsNumberOrSymbol(new) ->
+                PasswordChangeResult.Failure("New password must contain at least one number or symbol.")
+            new == current -> PasswordChangeResult.Failure("New password must be different from the current one.")
+            new != confirmation -> PasswordChangeResult.Failure("Passwords do not match.")
+            else -> {
+                passwordOverrides[user.id] = new
+                PasswordChangeResult.Success
+            }
+        }
+    }
+
+    private fun passwordOf(user: User): String = passwordOverrides[user.id] ?: user.password
 
     fun registerDemoPatient(name: String, email: String, password: String): Boolean {
         val normalizedEmail = email.trim().lowercase()

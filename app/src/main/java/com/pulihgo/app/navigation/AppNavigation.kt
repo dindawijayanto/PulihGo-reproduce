@@ -1,8 +1,11 @@
 package com.pulihgo.app.navigation
 
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,16 +13,23 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.pulihgo.app.BuildConfig
 import com.pulihgo.app.auth.AuthRepository
 import com.pulihgo.app.auth.LoginResult
+import com.pulihgo.app.auth.PasswordChangeResult
 import com.pulihgo.app.auth.SessionStore
+import com.pulihgo.app.auth.TherapistProfileStore
 import com.pulihgo.app.data.MockDataSource
+import com.pulihgo.app.data.cloud.CloudSyncResult
+import com.pulihgo.app.data.cloud.SessionCloudSync
+import com.pulihgo.app.data.cloud.SupabaseConfig
 import com.pulihgo.app.data.exercise.ExerciseCatalog
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
-import com.pulihgo.app.data.session.PatientSessionHistory
+import com.pulihgo.app.data.session.PatientSessionRepository
 import com.pulihgo.app.data.session.SeededSessionSource
 import com.pulihgo.app.data.session.SessionPainLevel
+import com.pulihgo.app.data.session.TherapistSessionLookup
 import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.account.ForgotPasswordScreen
@@ -38,14 +48,21 @@ import com.pulihgo.app.ui.summary.SessionHistoryLogic
 import com.pulihgo.app.ui.therapist.ExerciseTarget
 import com.pulihgo.app.ui.therapist.TherapistDashboardLogic
 import com.pulihgo.app.ui.therapist.TherapistDashboardScreen
+import com.pulihgo.app.ui.therapist.TherapistForgotPasswordScreen
+import com.pulihgo.app.ui.therapist.TherapistLoginScreen
 import com.pulihgo.app.ui.therapist.TherapistPatientDetailHandoff
 import com.pulihgo.app.ui.therapist.TherapistPatientListLogic
 import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
 import com.pulihgo.app.ui.therapist.TherapistReportsScreen
+import com.pulihgo.app.ui.therapist.TherapistSessionDetailLogic
+import com.pulihgo.app.ui.therapist.TherapistSessionDetailScreen
+import com.pulihgo.app.ui.therapist.TherapistSettingsLogic
+import com.pulihgo.app.ui.therapist.TherapistSettingsScreen
 import com.pulihgo.app.ui.therapist.TherapistTab
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 private const val PREF_FILE = "pulihgo_local_prefs"
 private const val ONBOARDING_SEEN_KEY = "pulihgo_onboarding_seen"
@@ -82,6 +99,8 @@ fun AppNavigation(
     val dataSource = remember { MockDataSource(context.applicationContext) }
     val auth = remember { AuthRepository(dataSource.loadUsers()) }
     val sessionStore = remember { SessionStore(context.applicationContext) }
+    val therapistProfileStore = remember { TherapistProfileStore(context.applicationContext) }
+    var therapistProfileVersion by remember { mutableStateOf(0) }
     val exerciseSessionStore = remember { ExerciseSessionStore(context.applicationContext) }
     val prefs = remember { context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE) }
     val exercises = remember {
@@ -92,6 +111,30 @@ fun AppNavigation(
     // Seeded demo history (assets/mock_data/sessions.json), re-keyed to patient user ids.
     val seededSessions = remember {
         SeededSessionSource(context.applicationContext).load(allPatients.associate { it.id to it.userId })
+    }
+    val sessionRepository = remember(allPatients, seededSessions) {
+        PatientSessionRepository(allPatients, seededSessions, exerciseSessionStore::read)
+    }
+    val cloudSync = remember(allPatients) {
+        SessionCloudSync(
+            context = context.applicationContext,
+            config = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY),
+            patientIdForUser = { userId -> allPatients.firstOrNull { it.userId == userId }?.id },
+            readDevice = exerciseSessionStore::read,
+        )
+    }
+    val scope = rememberCoroutineScope()
+    fun syncToCloud(userId: String, announce: Boolean) {
+        scope.launch {
+            val message = when (val result = cloudSync.syncPending(userId)) {
+                is CloudSyncResult.Synced -> "Session synced to the cloud."
+                is CloudSyncResult.Offline -> "Saved on this phone. It will sync when you're online."
+                is CloudSyncResult.Failed -> "Saved on this phone. Cloud sync failed (${result.reason})."
+                CloudSyncResult.NotConnected -> "Saved on this phone. Log in again to sync to the cloud."
+                else -> null
+            }
+            if (announce && message != null) Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
     }
     val exerciseTargets = remember(exercises) {
         exercises.associate { it.id to ExerciseTarget(it.name, it.targetRomDeg, it.romCeilingDeg, it.targetReps) }
@@ -104,6 +147,7 @@ fun AppNavigation(
     var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedSummarySessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedReportsPatientId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTherapistSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
@@ -126,29 +170,44 @@ fun AppNavigation(
         if (backStack.size > 1) backStack = backStack.dropLast(1)
     }
     fun logout() {
+        val loginRoute = RoleRouter.loginFor(currentUser?.role)
+        currentUser?.let { cloudSync.disconnect(it.id) }
         sessionStore.currentUserId = null
         currentUser = null
         selectedExerciseId = null
         selectedTherapistPatientId = null
         selectedSummarySessionId = null
         selectedReportsPatientId = null
+        selectedTherapistSessionId = null
         draftEmail = ""
-        resetTo(AppRoute.LOGIN)
+        resetTo(loginRoute)
+    }
+    fun completeLogin(loggedIn: User) {
+        sessionStore.currentUserId = loggedIn.id.takeUnless { it.startsWith("U_LOCAL_") }
+        currentUser = loggedIn
+        resetTo(RoleRouter.homeFor(loggedIn.role))
     }
 
     BackHandler(enabled = backStack.size > 1) { goBack() }
 
+    LaunchedEffect(currentUser?.id) {
+        val patient = currentUser?.takeIf { it.role == Role.PATIENT }
+        if (patient != null) syncToCloud(patient.id, announce = false)
+    }
+
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
-
-    val storedRecords = remember(user?.id, lastSavedPainLevel) {
-        if (user != null) exerciseSessionStore.read(user.id) else emptyList()
+    val therapistUser = user?.takeIf { it.role == Role.THERAPIST }
+    val therapistProfile = remember(therapistUser?.id, therapistProfileVersion) {
+        therapistUser?.let(therapistProfileStore::profile)
     }
+    val therapistName = therapistProfile?.fullName ?: user?.fullName.orEmpty()
+
     // PGF-PRO-03: the patient's own sessions (seeded history + this device), newest first.
-    val patientSessions = remember(user?.id, storedRecords) {
+    val patientSessions = remember(user?.id, lastSavedPainLevel) {
         val patientUser = user
         if (patientUser == null || patientUser.role != Role.PATIENT) emptyList()
-        else PatientSessionHistory.merge(seededSessions, storedRecords, patientUser.id)
+        else sessionRepository.sessionsForUser(patientUser.id)
     }
     val homeSessions = remember(patientSessions) { patientSessions.map { it.record.toHomeExerciseSession() } }
 
@@ -160,14 +219,11 @@ fun AppNavigation(
         if (therapist == null || therapist.role != Role.THERAPIST) {
             emptyList()
         } else {
-            val assigned = allPatients.filter { it.therapistId == therapist.id }
             TherapistDashboardLogic.assemble(
                 therapistId = therapist.id,
-                patients = assigned,
+                patients = sessionRepository.patientsOf(therapist.id),
                 users = auth.demoAccounts(),
-                sessionsByUserId = assigned.associate {
-                    it.userId to PatientSessionHistory.merge(seededSessions, exerciseSessionStore.read(it.userId), it.userId)
-                },
+                sessionsByUserId = sessionRepository.cohortSessions(therapist.id),
             )
         }
     }
@@ -191,6 +247,7 @@ fun AppNavigation(
         when (tab) {
             TherapistTab.THERAPY -> navigate(AppRoute.THERAPIST_PATIENTS)
             TherapistTab.REPORTS -> navigate(AppRoute.THERAPIST_REPORTS)
+            TherapistTab.SETTINGS -> navigate(AppRoute.THERAPIST_SETTINGS)
             else -> Unit
         }
     }
@@ -215,17 +272,39 @@ fun AppNavigation(
                 when (val result = auth.login(identifier, password)) {
                     is LoginResult.Failure -> result.message
                     is LoginResult.Success -> {
-                        // In-memory demo registrants intentionally don't persist across app restarts.
-                        sessionStore.currentUserId =
-                            result.user.id.takeUnless { it.startsWith("U_LOCAL_") }
-                        currentUser = result.user
-                        resetTo(RoleRouter.homeFor(result.user.role))
+                        completeLogin(result.user)
+                        if (result.user.role == Role.PATIENT) {
+                            scope.launch {
+                                if (cloudSync.connect(result.user, password)) syncToCloud(result.user.id, announce = false)
+                            }
+                        }
                         null
                     }
                 }
             },
             onRegister = { navigate(AppRoute.REGISTER) },
             onForgotPassword = { navigate(AppRoute.FORGOT) },
+            onTherapistLogin = { navigate(AppRoute.THERAPIST_LOGIN) },
+        )
+
+        AppRoute.THERAPIST_LOGIN -> TherapistLoginScreen(
+            isDark = isDark,
+            onLogin = { identifier, password ->
+                when (val result = auth.loginTherapist(identifier, password)) {
+                    is LoginResult.Failure -> result.message
+                    is LoginResult.Success -> {
+                        completeLogin(result.user)
+                        null
+                    }
+                }
+            },
+            onForgotPassword = { navigate(AppRoute.THERAPIST_FORGOT) },
+            onPatientLogin = { if (backStack.size > 1) goBack() else resetTo(AppRoute.LOGIN) },
+        )
+
+        AppRoute.THERAPIST_FORGOT -> TherapistForgotPasswordScreen(
+            isDark = isDark,
+            onBackToLogin = { goBack() },
         )
 
         AppRoute.REGISTER -> RegisterScreen(
@@ -334,6 +413,7 @@ fun AppNavigation(
                     onSessionCompleted = { record ->
                         val stored = exerciseSessionStore.append(record)
                         if (stored) {
+                            syncToCloud(record.patientId, announce = true)
                             lastSavedPainLevel = record.painLevel
                             goBack() // return to Preparation with Figma saved status banner
                         }
@@ -376,7 +456,7 @@ fun AppNavigation(
 
         // PGF-THR-02: Therapist Dashboard is the therapist's home.
         AppRoute.THERAPIST_HOME -> TherapistDashboardScreen(
-            therapistName = user?.fullName.orEmpty(),
+            therapistName = therapistName,
             summary = remember(therapistCohort, exerciseTargets) {
                 TherapistDashboardLogic.summarize(therapistCohort, exerciseTargets, LocalDate.now())
             },
@@ -390,7 +470,7 @@ fun AppNavigation(
 
         // PGF-THR-03: Patient List & Search.
         AppRoute.THERAPIST_PATIENTS -> TherapistPatientListScreen(
-            therapistName = user?.fullName.orEmpty(),
+            therapistName = therapistName,
             items = therapistPatientItems,
             isDark = isDark,
             onNavigate = ::openTherapistTab,
@@ -400,7 +480,7 @@ fun AppNavigation(
 
         // PGF-THR-06: Reports UI for one selected patient.
         AppRoute.THERAPIST_REPORTS -> TherapistReportsScreen(
-            therapistName = user?.fullName.orEmpty(),
+            therapistName = therapistName,
             patients = therapistCohort,
             selectedPatientId = selectedReportsPatientId,
             exercises = exerciseTargets,
@@ -410,7 +490,75 @@ fun AppNavigation(
             onNavigate = ::openTherapistTab,
             onLogout = { logout() },
             onRefresh = { therapistRefreshTick++ },
+            onOpenSession = { patientId, sessionId ->
+                selectedReportsPatientId = patientId
+                selectedTherapistSessionId = sessionId
+                navigate(AppRoute.THERAPIST_SESSION_DETAIL)
+            },
         )
+
+        AppRoute.THERAPIST_SESSION_DETAIL -> {
+            val therapist = therapistUser
+            val patientId = selectedReportsPatientId
+            val sessionId = selectedTherapistSessionId
+            val detail = remember(therapist?.id, patientId, sessionId, therapistCohort) {
+                if (therapist == null || patientId == null || sessionId == null) null
+                else when (val lookup = sessionRepository.sessionForTherapist(therapist.id, patientId, sessionId)) {
+                    is TherapistSessionLookup.Found -> TherapistSessionDetailLogic.build(
+                        found = lookup,
+                        patientName = therapistCohort.firstOrNull { it.patient.id == patientId }?.name ?: patientId,
+                        exercises = exerciseTargets,
+                    )
+                    else -> null
+                }
+            }
+            TherapistSessionDetailScreen(
+                therapistName = therapistName,
+                detail = detail,
+                isDark = isDark,
+                onBack = { goBack() },
+                onNavigate = ::openTherapistTab,
+                onLogout = { logout() },
+            )
+        }
+
+        AppRoute.THERAPIST_SETTINGS -> {
+            val therapist = therapistUser
+            val profile = therapistProfile
+            if (therapist != null && profile != null) {
+                TherapistSettingsScreen(
+                    user = therapist,
+                    profile = profile,
+                    preferences = remember(therapist.id, therapistProfileVersion) {
+                        therapistProfileStore.preferences(therapist.id)
+                    },
+                    assignedPatientCount = therapistCohort.size,
+                    isDark = isDark,
+                    today = LocalDate.now(),
+                    onSaveProfile = { edited ->
+                        TherapistSettingsLogic.validate(edited) ?: run {
+                            therapistProfileStore.saveProfile(therapist.id, TherapistSettingsLogic.normalize(edited))
+                            therapistProfileVersion++
+                            null
+                        }
+                    },
+                    onPreferencesChange = {
+                        therapistProfileStore.savePreferences(therapist.id, it)
+                        therapistProfileVersion++
+                    },
+                    onDarkModeChange = { onAppearanceChange(if (it) "Dark" else "Light") },
+                    onChangePassword = { current, new, confirmation ->
+                        when (val result = auth.changePassword(therapist.id, current, new, confirmation)) {
+                            PasswordChangeResult.Success -> null
+                            is PasswordChangeResult.Failure -> result.message
+                        }
+                    },
+                    onViewCaseload = { openTherapistTab(TherapistTab.THERAPY) },
+                    onNavigate = ::openTherapistTab,
+                    onLogout = { logout() },
+                )
+            }
+        }
 
         // Temporary handoff until PGF-THR-04 (Patient Detail) lands.
         AppRoute.THERAPIST_PATIENT_DETAIL -> TherapistPatientDetailHandoff(

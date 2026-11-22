@@ -313,7 +313,8 @@ fun LoginScreen(
     isDark: Boolean = false,
     onLogin: (email: String, password: String) -> String?,
     onRegister: () -> Unit,
-    onForgotPassword: () -> Unit
+    onForgotPassword: () -> Unit,
+    onTherapistLogin: () -> Unit = {}
 ) {
     val p = palette(isDark)
     var email by rememberSaveable(prefillEmail) { mutableStateOf(prefillEmail) }
@@ -365,6 +366,10 @@ fun LoginScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Don't have an account?", color = p.secondary, fontSize = 13.sp)
             SmallLink("Register as Patient", onRegister)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Are you a therapist?", color = p.secondary, fontSize = 13.sp)
+            SmallLink("Therapist Portal", onTherapistLogin)
         }
         Spacer(Modifier.height(12.dp))
         Text("Demo Patient: alya@pulihgo.demo / demo123 · Therapist: therapist@pulihgo.demo / demo123",

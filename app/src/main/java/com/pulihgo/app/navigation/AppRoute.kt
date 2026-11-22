@@ -9,6 +9,8 @@ enum class AppRoute(val allowedRoles: Set<Role>) {
     REGISTER(emptySet()),
     FORGOT(emptySet()),
     LINK_SENT(emptySet()),
+    THERAPIST_LOGIN(emptySet()),
+    THERAPIST_FORGOT(emptySet()),
 
     PATIENT_HOME(setOf(Role.PATIENT)),
     PATIENT_SETTINGS(setOf(Role.PATIENT)),
@@ -19,7 +21,9 @@ enum class AppRoute(val allowedRoles: Set<Role>) {
     THERAPIST_HOME(setOf(Role.THERAPIST)),
     THERAPIST_PATIENTS(setOf(Role.THERAPIST)),
     THERAPIST_PATIENT_DETAIL(setOf(Role.THERAPIST)),
-    THERAPIST_REPORTS(setOf(Role.THERAPIST));
+    THERAPIST_REPORTS(setOf(Role.THERAPIST)),
+    THERAPIST_SESSION_DETAIL(setOf(Role.THERAPIST)),
+    THERAPIST_SETTINGS(setOf(Role.THERAPIST));
 
     val isPublic: Boolean get() = allowedRoles.isEmpty()
 }
@@ -30,12 +34,17 @@ object RoleRouter {
         Role.THERAPIST -> AppRoute.THERAPIST_HOME
     }
 
+    fun loginFor(role: Role?): AppRoute = when (role) {
+        Role.THERAPIST -> AppRoute.THERAPIST_LOGIN
+        else -> AppRoute.LOGIN
+    }
+
     fun canAccess(route: AppRoute, role: Role?): Boolean =
         route.isPublic || (role != null && role in route.allowedRoles)
 
     fun resolve(requested: AppRoute, role: Role?): AppRoute = when {
         role == null -> if (requested.isPublic) requested else AppRoute.LOGIN
-        requested == AppRoute.LOGIN -> homeFor(role)
+        requested == AppRoute.LOGIN || requested == AppRoute.THERAPIST_LOGIN -> homeFor(role)
         canAccess(requested, role) -> requested
         else -> homeFor(role)
     }
