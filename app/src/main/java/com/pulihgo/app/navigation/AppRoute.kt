@@ -22,6 +22,7 @@ enum class AppRoute(val allowedRoles: Set<Role>) {
     THERAPIST_PATIENTS(setOf(Role.THERAPIST)),
     THERAPIST_PATIENT_DETAIL(setOf(Role.THERAPIST)),
     THERAPIST_REPORTS(setOf(Role.THERAPIST)),
+    THERAPIST_SESSION_DETAIL(setOf(Role.THERAPIST)),
     THERAPIST_SETTINGS(setOf(Role.THERAPIST));
 
     val isPublic: Boolean get() = allowedRoles.isEmpty()

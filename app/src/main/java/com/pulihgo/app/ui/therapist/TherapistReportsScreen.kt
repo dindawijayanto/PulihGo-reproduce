@@ -74,6 +74,7 @@ fun TherapistReportsScreen(
     onNavigate: (TherapistTab) -> Unit,
     onLogout: () -> Unit,
     onRefresh: () -> Unit,
+    onOpenSession: (patientId: String, sessionId: String) -> Unit = { _, _ -> },
 ) {
     val c = if (isDark) ThrColors.Dark else ThrColors.Light
     var rangeName by rememberSaveable { mutableStateOf(ReportRange.LAST_7_DAYS.name) }
@@ -121,7 +122,7 @@ fun TherapistReportsScreen(
                         EmptyRange(c, report, onShowAll = { rangeName = ReportRange.ALL_TIME.name })
                     }
                 } else {
-                    items(report.rows, key = { it.id }) { row -> SessionRowCard(c, row) }
+                    items(report.rows, key = { it.id }) { row -> SessionRowCard(c, row) { onOpenSession(report.patientId, row.id) } }
                 }
             }
             item { PortalFooter(c) }
@@ -536,9 +537,10 @@ private fun EmptyRange(c: ThrColors, r: PatientReport, onShowAll: () -> Unit) {
 }
 
 @Composable
-private fun SessionRowCard(c: ThrColors, row: ReportSessionRow) {
+private fun SessionRowCard(c: ThrColors, row: ReportSessionRow, onOpen: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surface).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surface)
+            .clickable(role = Role.Button, onClick = onOpen).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

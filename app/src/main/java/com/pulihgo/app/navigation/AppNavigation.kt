@@ -1,8 +1,11 @@
 package com.pulihgo.app.navigation
 
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,18 +13,23 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.pulihgo.app.BuildConfig
 import com.pulihgo.app.auth.AuthRepository
 import com.pulihgo.app.auth.LoginResult
 import com.pulihgo.app.auth.PasswordChangeResult
 import com.pulihgo.app.auth.SessionStore
 import com.pulihgo.app.auth.TherapistProfileStore
 import com.pulihgo.app.data.MockDataSource
+import com.pulihgo.app.data.cloud.CloudSyncResult
+import com.pulihgo.app.data.cloud.SessionCloudSync
+import com.pulihgo.app.data.cloud.SupabaseConfig
 import com.pulihgo.app.data.exercise.ExerciseCatalog
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
-import com.pulihgo.app.data.session.PatientSessionHistory
+import com.pulihgo.app.data.session.PatientSessionRepository
 import com.pulihgo.app.data.session.SeededSessionSource
 import com.pulihgo.app.data.session.SessionPainLevel
+import com.pulihgo.app.data.session.TherapistSessionLookup
 import com.pulihgo.app.data.model.Role
 import com.pulihgo.app.data.model.User
 import com.pulihgo.app.ui.account.ForgotPasswordScreen
@@ -46,12 +54,15 @@ import com.pulihgo.app.ui.therapist.TherapistPatientDetailHandoff
 import com.pulihgo.app.ui.therapist.TherapistPatientListLogic
 import com.pulihgo.app.ui.therapist.TherapistPatientListScreen
 import com.pulihgo.app.ui.therapist.TherapistReportsScreen
+import com.pulihgo.app.ui.therapist.TherapistSessionDetailLogic
+import com.pulihgo.app.ui.therapist.TherapistSessionDetailScreen
 import com.pulihgo.app.ui.therapist.TherapistSettingsLogic
 import com.pulihgo.app.ui.therapist.TherapistSettingsScreen
 import com.pulihgo.app.ui.therapist.TherapistTab
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 private const val PREF_FILE = "pulihgo_local_prefs"
 private const val ONBOARDING_SEEN_KEY = "pulihgo_onboarding_seen"
@@ -101,6 +112,30 @@ fun AppNavigation(
     val seededSessions = remember {
         SeededSessionSource(context.applicationContext).load(allPatients.associate { it.id to it.userId })
     }
+    val sessionRepository = remember(allPatients, seededSessions) {
+        PatientSessionRepository(allPatients, seededSessions, exerciseSessionStore::read)
+    }
+    val cloudSync = remember(allPatients) {
+        SessionCloudSync(
+            context = context.applicationContext,
+            config = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY),
+            patientIdForUser = { userId -> allPatients.firstOrNull { it.userId == userId }?.id },
+            readDevice = exerciseSessionStore::read,
+        )
+    }
+    val scope = rememberCoroutineScope()
+    fun syncToCloud(userId: String, announce: Boolean) {
+        scope.launch {
+            val message = when (val result = cloudSync.syncPending(userId)) {
+                is CloudSyncResult.Synced -> "Session synced to the cloud."
+                is CloudSyncResult.Offline -> "Saved on this phone. It will sync when you're online."
+                is CloudSyncResult.Failed -> "Saved on this phone. Cloud sync failed (${result.reason})."
+                CloudSyncResult.NotConnected -> "Saved on this phone. Log in again to sync to the cloud."
+                else -> null
+            }
+            if (announce && message != null) Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
     val exerciseTargets = remember(exercises) {
         exercises.associate { it.id to ExerciseTarget(it.name, it.targetRomDeg, it.romCeilingDeg, it.targetReps) }
     }
@@ -112,6 +147,7 @@ fun AppNavigation(
     var selectedTherapistPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedSummarySessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedReportsPatientId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTherapistSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
@@ -135,12 +171,14 @@ fun AppNavigation(
     }
     fun logout() {
         val loginRoute = RoleRouter.loginFor(currentUser?.role)
+        currentUser?.let { cloudSync.disconnect(it.id) }
         sessionStore.currentUserId = null
         currentUser = null
         selectedExerciseId = null
         selectedTherapistPatientId = null
         selectedSummarySessionId = null
         selectedReportsPatientId = null
+        selectedTherapistSessionId = null
         draftEmail = ""
         resetTo(loginRoute)
     }
@@ -152,6 +190,11 @@ fun AppNavigation(
 
     BackHandler(enabled = backStack.size > 1) { goBack() }
 
+    LaunchedEffect(currentUser?.id) {
+        val patient = currentUser?.takeIf { it.role == Role.PATIENT }
+        if (patient != null) syncToCloud(patient.id, announce = false)
+    }
+
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
     val therapistUser = user?.takeIf { it.role == Role.THERAPIST }
@@ -160,14 +203,11 @@ fun AppNavigation(
     }
     val therapistName = therapistProfile?.fullName ?: user?.fullName.orEmpty()
 
-    val storedRecords = remember(user?.id, lastSavedPainLevel) {
-        if (user != null) exerciseSessionStore.read(user.id) else emptyList()
-    }
     // PGF-PRO-03: the patient's own sessions (seeded history + this device), newest first.
-    val patientSessions = remember(user?.id, storedRecords) {
+    val patientSessions = remember(user?.id, lastSavedPainLevel) {
         val patientUser = user
         if (patientUser == null || patientUser.role != Role.PATIENT) emptyList()
-        else PatientSessionHistory.merge(seededSessions, storedRecords, patientUser.id)
+        else sessionRepository.sessionsForUser(patientUser.id)
     }
     val homeSessions = remember(patientSessions) { patientSessions.map { it.record.toHomeExerciseSession() } }
 
@@ -179,14 +219,11 @@ fun AppNavigation(
         if (therapist == null || therapist.role != Role.THERAPIST) {
             emptyList()
         } else {
-            val assigned = allPatients.filter { it.therapistId == therapist.id }
             TherapistDashboardLogic.assemble(
                 therapistId = therapist.id,
-                patients = assigned,
+                patients = sessionRepository.patientsOf(therapist.id),
                 users = auth.demoAccounts(),
-                sessionsByUserId = assigned.associate {
-                    it.userId to PatientSessionHistory.merge(seededSessions, exerciseSessionStore.read(it.userId), it.userId)
-                },
+                sessionsByUserId = sessionRepository.cohortSessions(therapist.id),
             )
         }
     }
@@ -236,6 +273,11 @@ fun AppNavigation(
                     is LoginResult.Failure -> result.message
                     is LoginResult.Success -> {
                         completeLogin(result.user)
+                        if (result.user.role == Role.PATIENT) {
+                            scope.launch {
+                                if (cloudSync.connect(result.user, password)) syncToCloud(result.user.id, announce = false)
+                            }
+                        }
                         null
                     }
                 }
@@ -371,6 +413,7 @@ fun AppNavigation(
                     onSessionCompleted = { record ->
                         val stored = exerciseSessionStore.append(record)
                         if (stored) {
+                            syncToCloud(record.patientId, announce = true)
                             lastSavedPainLevel = record.painLevel
                             goBack() // return to Preparation with Figma saved status banner
                         }
@@ -447,7 +490,37 @@ fun AppNavigation(
             onNavigate = ::openTherapistTab,
             onLogout = { logout() },
             onRefresh = { therapistRefreshTick++ },
+            onOpenSession = { patientId, sessionId ->
+                selectedReportsPatientId = patientId
+                selectedTherapistSessionId = sessionId
+                navigate(AppRoute.THERAPIST_SESSION_DETAIL)
+            },
         )
+
+        AppRoute.THERAPIST_SESSION_DETAIL -> {
+            val therapist = therapistUser
+            val patientId = selectedReportsPatientId
+            val sessionId = selectedTherapistSessionId
+            val detail = remember(therapist?.id, patientId, sessionId, therapistCohort) {
+                if (therapist == null || patientId == null || sessionId == null) null
+                else when (val lookup = sessionRepository.sessionForTherapist(therapist.id, patientId, sessionId)) {
+                    is TherapistSessionLookup.Found -> TherapistSessionDetailLogic.build(
+                        found = lookup,
+                        patientName = therapistCohort.firstOrNull { it.patient.id == patientId }?.name ?: patientId,
+                        exercises = exerciseTargets,
+                    )
+                    else -> null
+                }
+            }
+            TherapistSessionDetailScreen(
+                therapistName = therapistName,
+                detail = detail,
+                isDark = isDark,
+                onBack = { goBack() },
+                onNavigate = ::openTherapistTab,
+                onLogout = { logout() },
+            )
+        }
 
         AppRoute.THERAPIST_SETTINGS -> {
             val therapist = therapistUser
