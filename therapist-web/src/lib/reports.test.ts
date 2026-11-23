@@ -50,24 +50,35 @@ describe('statusOf', () => {
 })
 
 describe('buildReport', () => {
-  it('aggregates only sessions inside the range', () => {
+  it('aggregates sessions inside the range, includes seeded data, and computes advanced KPIs', () => {
     const r = report([
       session(at(0), { repetitions: 4, peak_rom_deg: 58, average_smoothness: 0.8 }),
-      session(at(-3), { repetitions: 6, peak_rom_deg: 66, pain: 'MILD_PAIN' }),
+      session(at(-3), { repetitions: 6, peak_rom_deg: 66, pain: 'MILD_PAIN', average_smoothness: 0.9 }),
       session(at(-4), { repetitions: 0, peak_rom_deg: 0, average_smoothness: 0.6 }),
-      session(at(-10), { repetitions: 9, peak_rom_deg: 75 }),
+      session(at(-5), { repetitions: 5, peak_rom_deg: 60, source: 'SEEDED' }), // should be included in KPIs
+      session(at(-10), { repetitions: 9, peak_rom_deg: 75 }), // out of range
     ])
+    // Total reps = 4 + 6 + 0 + 5 = 15
+    // Weighted smoothness = (0.8 * 4 + 0.9 * 6 + 5 * null(skip)) / 10 = (3.2 + 5.4) / 10 = 0.86
+    // target reps = 10. Actual sessions = 4 (day 0, -3, -4, -5). Total expected reps = 4 * 10 = 40.
+    // adherence = 15 / 40 = 37.5%
+    // ROM Delta = day 0 ROM (58) - day -5 ROM (60) = -2
     expect(r.kpis).toEqual({
-      sessions: 3,
-      totalRepetitions: 10,
+      sessions: 4,
+      totalRepetitions: 15,
       bestPeakRomDeg: 66,
-      averagePeakRomDeg: 62,
-      averageSmoothness: 0.7,
+      averagePeakRomDeg: 61.333333333333336, // (58 + 66 + 60) / 3 = 184 / 3 = 61.33...
+      averageSmoothness: 0.86,
       painReportedSessions: 1,
+      adherenceRate: 100 * 15 / 40,
+      romProgressionDelta: -2,
+      painRate: (1 / 4) * 100,
+      mildPainSessions: 1,
+      stoppedPainSessions: 0,
     })
     expect(r.sessionsOutsideRange).toBe(1)
-    expect(r.rows.map((row) => row.status)).toEqual(['COMPLETED', 'MILD_PAIN', 'NO_REPETITIONS'])
-    expect(r.romTrend.map((p) => p.peakRomDeg)).toEqual([66, 58])
+    expect(r.rows.map((row) => row.status)).toEqual(['COMPLETED', 'NO_REPETITIONS', 'MILD_PAIN', 'COMPLETED'])
+    expect(r.romTrend.map((p) => p.peakRomDeg)).toEqual([60, 66, 58]) // Seeded data is in romTrend
   })
 
   it('includes everything for All Time and leaves KPIs empty when nothing has reps', () => {

@@ -117,29 +117,35 @@ export function ReportsPage() {
                   <span className="label">Sessions</span>
                   <b>{report.kpis.sessions}</b>
                   <small>
-                    {report.kpis.painReportedSessions === 0
+                    {report.kpis.painRate === 0
                       ? 'No pain reported'
-                      : `${report.kpis.painReportedSessions} with pain reported`}
+                      : `${Math.round(report.kpis.painRate)}% with pain (${report.kpis.stoppedPainSessions} stopped)`}
                   </small>
                 </div>
                 <div className="kpi">
-                  <span className="label">Total reps</span>
-                  <b>{report.kpis.totalRepetitions}</b>
-                  <small>Completed repetitions</small>
+                  <span className="label">Adherence</span>
+                  <b>{report.kpis.adherenceRate == null ? '—' : `${Math.round(report.kpis.adherenceRate)}%`}</b>
+                  <small>
+                    {report.kpis.totalRepetitions} total reps completed
+                  </small>
                 </div>
                 <div className="kpi">
-                  <span className="label">Best peak ROM</span>
+                  <span className="label">Peak ROM</span>
                   <b>{report.kpis.bestPeakRomDeg == null ? '—' : `${Math.round(report.kpis.bestPeakRomDeg)}°`}</b>
                   <small>
                     {report.kpis.averagePeakRomDeg == null
                       ? 'No repetitions in range'
-                      : `Average ${Math.round(report.kpis.averagePeakRomDeg)}°`}
+                      : `Avg ${Math.round(report.kpis.averagePeakRomDeg)}° ${
+                          report.kpis.romProgressionDelta != null
+                            ? `(${report.kpis.romProgressionDelta > 0 ? '+' : ''}${Math.round(report.kpis.romProgressionDelta)}°)`
+                            : ''
+                        }`}
                   </small>
                 </div>
                 <div className="kpi">
                   <span className="label">Avg smoothness</span>
                   <b>{report.kpis.averageSmoothness == null ? '—' : `${percent(report.kpis.averageSmoothness)}%`}</b>
-                  <small>{report.kpis.averageSmoothness == null ? 'Not measured in range' : 'Sessions that measured it'}</small>
+                  <small>{report.kpis.averageSmoothness == null ? 'Not measured in range' : 'Weighted by repetitions'}</small>
                 </div>
               </div>
 

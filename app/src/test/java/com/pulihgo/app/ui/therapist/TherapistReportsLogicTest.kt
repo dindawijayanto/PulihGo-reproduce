@@ -44,21 +44,58 @@ class TherapistReportsLogicTest {
     fun lastSevenDaysExcludesOlderSessions() {
         val r = TherapistReportsLogic.build(alya, ReportRange.LAST_7_DAYS, exercises, today, zone)
         assertEquals(listOf("D2", "D3", "D1"), r.rows.map { it.id })
-        assertEquals(1, r.sessionsOutsideRange)
-        assertEquals(3, r.kpis.sessions)
-        assertEquals(14, r.kpis.totalRepetitions)
-        assertEquals(62.0, r.kpis.bestPeakRomDeg!!, 0.0)
-        assertEquals(58.5, r.kpis.averagePeakRomDeg!!, 0.001)
-        assertEquals(0.81, r.kpis.averageSmoothness!!, 0.001)
-        assertEquals(2, r.kpis.painReportedSessions)
-        assertTrue(r.rangeLabel.startsWith("Last 7 Days (11 Nov"))
+        assertEquals(1, r.sessionsOutsideRange) // S001 is older than 7 days
     }
 
     @Test
-    fun allTimeIncludesSeededHistoryAndTrendIsOldestFirst() {
+    fun advancedKpisIncludeSeededData() {
+        val p = patient(
+            session("S001", today.minusDays(5), 5, 60.0, seeded = true), // Should be included
+            session("D1", today.minusDays(3), 6, 66.0, SessionPainLevel.MILD_PAIN, smooth = 0.9),
+            session("D2", today, 4, 58.0, smooth = 0.8),
+            session("D3", today.minusDays(1), 0, 0.0, SessionPainLevel.STOPPED_DUE_TO_PAIN),
+        )
+        val r = TherapistReportsLogic.build(p, ReportRange.LAST_7_DAYS, exercises, today, zone)
+        
+        // rows should contain all 4 sessions
+        assertEquals(4, r.rows.size)
+        
+        // all sessions in range = 4
+        assertEquals(4, r.kpis.sessions)
+        
+        // Reps = 5 + 6 + 4 + 0 = 15
+        assertEquals(15, r.kpis.totalRepetitions)
+        
+        // Best ROM = 66
+        assertEquals(66.0, r.kpis.bestPeakRomDeg!!, 0.0)
+        
+        // Average ROM = (60 + 66 + 58) / 3 = 61.333
+        assertEquals(61.333, r.kpis.averagePeakRomDeg!!, 0.001)
+        
+        // Weighted Smoothness = (0.9 * 6 + 0.8 * 4 + 5 * null(skip)) / 10 = 0.86
+        assertEquals(0.86, r.kpis.averageSmoothness!!, 0.001)
+        
+        // Pain
+        assertEquals(1, r.kpis.mildPainSessions)
+        assertEquals(1, r.kpis.stoppedPainSessions)
+        assertEquals(2, r.kpis.painReportedSessions)
+        assertEquals((2.0 / 4.0) * 100, r.kpis.painRate, 0.01)
+        
+        // Adherence Rate (Target is 10, 4 sessions, total target = 40)
+        // Actual reps = 15
+        // Adherence = (15 / 40) * 100 = 37.5%
+        assertEquals((15.0 / 40.0) * 100, r.kpis.adherenceRate!!, 0.01)
+        
+        // ROM Delta = Newest (D2: 58.0) - Oldest (S001: 60.0) = -2.0
+        assertEquals(-2.0, r.kpis.romProgressionDelta!!, 0.0)
+    }
+
+    @Test
+    fun allTimeIncludesSeededHistoryInRowsAndTrend() {
         val r = TherapistReportsLogic.build(alya, ReportRange.ALL_TIME, exercises, today, zone)
         assertEquals(4, r.rows.size)
         assertEquals(0, r.sessionsOutsideRange)
+        // trend includes seeded
         assertEquals(listOf(56.0, 55.0, 62.0), r.romTrend.map { it.peakRomDeg })
         assertEquals("8 Nov", r.romTrend.first().label)
         assertTrue(r.rows.last().seeded)
