@@ -285,6 +285,19 @@ h1, h2, h3, p { margin: 0; }
 .flag p { font-size: 13px; line-height: 18px; }
 .flag .link-btn { align-self: flex-start; }
 
+.report-controls { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; padding: 20px; }
+.report-controls .select { height: 42px; }
+
+.rom-chart { width: 100%; height: auto; display: block; }
+.rom-chart text { font-size: 10px; font-weight: 600; fill: var(--faint); font-family: inherit; }
+.rom-chart .grid { stroke: var(--surface-high); stroke-width: 1; }
+.rom-chart .line { fill: none; stroke: var(--accent-strong); stroke-width: 2.5; stroke-linejoin: round; }
+.rom-chart .dot { fill: var(--surface); stroke: var(--accent-strong); stroke-width: 2.5; }
+.rom-chart .target { stroke: var(--warn-text); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.rom-chart .ceiling { stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.rom-chart .target-label { fill: var(--warn-text); }
+.rom-chart .ceiling-label { fill: var(--danger); }
+
 .empty { padding: 32px; text-align: center; color: var(--muted); }
 .tag { font-size: 10px; font-weight: 700; background: var(--surface-high); color: var(--muted); padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
 
@@ -294,7 +307,7 @@ h1, h2, h3, p { margin: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 @media (max-width: 900px) {
-  .grid-2, .kpis { grid-template-columns: minmax(0, 1fr); }
+  .grid-2, .kpis, .report-controls { grid-template-columns: minmax(0, 1fr); }
   .portal-header, .portal-main, .portal-foot, .gateway-top, .gateway-foot { padding-left: 16px; padding-right: 16px; }
   .who-text { display: none; }
 }
