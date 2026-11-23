@@ -69,6 +69,18 @@ export async function listSessions(patientId: string): Promise<ExerciseSession[]
   return (data ?? []) as ExerciseSession[]
 }
 
+/** Every synced session of the given patients; RLS limits this to the therapist's own patients. */
+export async function listSessionsForPatients(patientIds: string[]): Promise<ExerciseSession[]> {
+  if (patientIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('exercise_sessions')
+    .select('*')
+    .in('patient_id', patientIds)
+    .order('ended_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as ExerciseSession[]
+}
+
 export async function listSessionCounts(patientIds: string[]): Promise<Record<string, { count: number; latest: string | null }>> {
   if (patientIds.length === 0) return {}
   const { data, error } = await supabase
