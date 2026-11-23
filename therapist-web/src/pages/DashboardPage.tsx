@@ -177,7 +177,8 @@ export function DashboardPage() {
 }
 
 export function RepBars({ week, target }: { week: DailyReps[]; target?: number | null }) {
-  const max = Math.max(1, target ?? 0, ...week.map((d) => d.repetitions))
+  // Headroom above the target keeps its dashed line visible inside the track.
+  const max = Math.max(1, (target ?? 0) * 1.2, ...week.map((d) => d.repetitions))
   return (
     <div className="bars" role="img" aria-label={week.map((d) => `${d.date}: ${d.repetitions} reps`).join(', ')}>
       {week.map((d) => (

@@ -9,7 +9,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { PatientSessionsPage } from './pages/PatientSessionsPage'
 import { PatientsPage } from './pages/PatientsPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SessionDetailPage } from './pages/SessionDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -50,7 +50,7 @@ export function App() {
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/:patientId" element={<PatientSessionsPage />} />
               <Route path="/patients/:patientId/sessions/:sessionId" element={<SessionDetailPage />} />
-              <Route path="/reports" element={<PlaceholderPage section="REPORTS" title="Weekly Reports" task="PGF-THR-06" />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
