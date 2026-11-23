@@ -64,12 +64,13 @@ npm test
 |---|---|---|
 | `/login`, `/forgot-password`, `/reset-password` | THR-01 | Therapist sign in, reset email, set new password |
 | `/settings` | THR-01 | Profile (saved to cloud), preferences, password change, logout |
-| `/patients` | INT-01 | Assigned patients with session counts |
+| `/dashboard` | THR-02 | KPIs, rolling 7-day rep timeline, monitoring flags, recent patient activity |
+| `/patients` | THR-03, INT-01 | Assigned patients with search (name, ID, username), filter (All / Active / Needs Follow-up), sort and latest-session telemetry |
 | `/patients/:patientId` | INT-01 | Sessions of one patient (auto-refresh every 15 s when Auto-Sync is on) |
 | `/patients/:patientId/sessions/:sessionId` | INT-01 | Session detail with ROM target/ceiling outcome and per-repetition data |
-| `/dashboard`, `/reports` | THR-02, THR-06 | Placeholders for the web versions |
+| `/reports` | THR-06 | Per-patient report: range picker, KPIs, ROM trend, weekly reps, session history |
 
-Data access lives in `src/lib/api.ts`; pure helpers (ROM outcome, durations, validation) in `src/lib/logic.ts` with tests in `logic.test.ts`. New pages go in `src/pages/` and are registered in `src/App.tsx` inside the `RequireTherapist` route.
+Data access lives in `src/lib/api.ts`; pure helpers (ROM outcome, durations, validation) in `src/lib/logic.ts` with tests in `logic.test.ts`; dashboard, patient list and report rules in `src/lib/dashboard.ts`, `patientList.ts` and `reports.ts`, each with a `*.test.ts`. New pages go in `src/pages/` and are registered in `src/App.tsx` inside the `RequireTherapist` route.
 
 Forgot password uses Supabase's built-in email. With the default Supabase mailer, emails are only delivered to members of the Supabase project team and are rate limited, so the `@pulihgo.demo` addresses will not receive them.
 
