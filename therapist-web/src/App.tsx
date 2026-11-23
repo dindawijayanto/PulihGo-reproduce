@@ -4,6 +4,7 @@ import { PortalLayout } from './components/PortalLayout'
 import { AuthProvider, useAuth } from './lib/auth'
 import { supabaseConfigured } from './lib/supabase'
 import { ThemeProvider } from './lib/theme'
+import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { PatientSessionsPage } from './pages/PatientSessionsPage'
@@ -45,7 +46,7 @@ export function App() {
             <Route path="/forgot-password" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route element={<RequireTherapist><PortalLayout /></RequireTherapist>}>
-              <Route path="/dashboard" element={<PlaceholderPage section="DASHBOARD" title="Dashboard" task="PGF-THR-02" />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/:patientId" element={<PatientSessionsPage />} />
               <Route path="/patients/:patientId/sessions/:sessionId" element={<SessionDetailPage />} />
