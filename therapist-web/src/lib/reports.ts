@@ -3,8 +3,9 @@ import { sessionDurationMs } from './logic'
 import type { Exercise, ExerciseSession } from './types'
 
 /**
- * PGF-THR-06 — per-patient report data for the Reports page. KPI definitions here are simple
- * aggregates of synced sessions; PGF-THR-07 (Erza) owns the final KPI calculations.
+ * PGF-THR-06 / PGF-THR-07 — per-patient report data for the Reports page.
+ * KPI calculations are finalized, filtering out seeded data and using advanced
+ * metrics (adherence, weighted smoothness, ROM delta).
  */
 
 export type ReportRange = 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL_TIME'
@@ -20,9 +21,14 @@ export interface ReportKpis {
   totalRepetitions: number
   bestPeakRomDeg: number | null
   averagePeakRomDeg: number | null
-  /** Mean of the sessions that measured smoothness; null when none did. */
+  /** Mean of the sessions that measured smoothness, weighted by repetitions; null when none did. */
   averageSmoothness: number | null
   painReportedSessions: number
+  adherenceRate: number | null
+  romProgressionDelta: number | null
+  painRate: number
+  mildPainSessions: number
+  stoppedPainSessions: number
 }
 
 export interface RomTrendPoint {
@@ -101,10 +107,44 @@ export function buildReport(
     return (startKey == null || d >= startKey) && d <= todayKey
   })
   const withReps = inRange.filter((s) => s.repetitions > 0)
+
   const exerciseIds = [...new Set(all.map((s) => s.exercise_id))]
   const exercise = exerciseIds.length === 1 ? exercises[exerciseIds[0]] : undefined
   const sessionTargetRom = all.find((s) => s.target_rom_deg != null)?.target_rom_deg ?? null
   const sessionTargetReps = all.find((s) => s.target_reps != null)?.target_reps ?? null
+  const targetRepsPerSession = sessionTargetReps ?? (exercise && exercise.target_reps > 0 ? exercise.target_reps : null)
+
+  let adherenceRate: number | null = null
+  if (targetRepsPerSession != null && targetRepsPerSession > 0 && inRange.length > 0) {
+    const targetTotalReps = inRange.length * targetRepsPerSession
+    const totalActualReps = inRange.reduce((sum, s) => sum + s.repetitions, 0)
+    adherenceRate = (totalActualReps / targetTotalReps) * 100
+  }
+
+  let averageSmoothness: number | null = null
+  let totalSmoothnessWeight = 0
+  let weightedSmoothnessSum = 0
+  inRange.forEach((s) => {
+    if (s.average_smoothness != null && s.repetitions > 0) {
+      weightedSmoothnessSum += s.average_smoothness * s.repetitions
+      totalSmoothnessWeight += s.repetitions
+    }
+  })
+  if (totalSmoothnessWeight > 0) {
+    averageSmoothness = weightedSmoothnessSum / totalSmoothnessWeight
+  }
+
+  const mildPainSessions = inRange.filter((s) => s.pain_level === 'MILD_PAIN').length
+  const stoppedPainSessions = inRange.filter((s) => s.pain_level === 'STOPPED_DUE_TO_PAIN').length
+  const painReportedSessions = mildPainSessions + stoppedPainSessions
+  const painRate = inRange.length > 0 ? (painReportedSessions / inRange.length) * 100 : 0
+
+  let romProgressionDelta: number | null = null
+  if (withReps.length >= 2) {
+    const oldestRom = withReps[withReps.length - 1].peak_rom_deg
+    const newestRom = withReps[0].peak_rom_deg
+    romProgressionDelta = newestRom - oldestRom
+  }
 
   return {
     patientId: patient.patient.id,
@@ -117,14 +157,19 @@ export function buildReport(
       totalRepetitions: inRange.reduce((sum, s) => sum + s.repetitions, 0),
       bestPeakRomDeg: withReps.length ? Math.max(...withReps.map((s) => s.peak_rom_deg)) : null,
       averagePeakRomDeg: average(withReps.map((s) => s.peak_rom_deg)),
-      averageSmoothness: average(inRange.flatMap((s) => (s.average_smoothness == null ? [] : [s.average_smoothness]))),
-      painReportedSessions: inRange.filter((s) => s.pain_level !== 'NO_PAIN').length,
+      averageSmoothness,
+      painReportedSessions,
+      adherenceRate,
+      romProgressionDelta,
+      painRate,
+      mildPainSessions,
+      stoppedPainSessions,
     },
     romTrend: [...withReps].reverse().map((s) => ({ label: shortDay(new Date(s.ended_at)), peakRomDeg: s.peak_rom_deg })),
     targetRomDeg: sessionTargetRom ?? exercise?.target_rom_deg ?? null,
     romCeilingDeg: exercise?.rom_ceiling_deg ?? null,
     week: weekOf(all, today, 'short'),
-    targetRepsPerSession: sessionTargetReps ?? (exercise && exercise.target_reps > 0 ? exercise.target_reps : null),
+    targetRepsPerSession,
     rows: inRange.map((s) => ({
       id: s.id,
       startedAt: s.started_at,

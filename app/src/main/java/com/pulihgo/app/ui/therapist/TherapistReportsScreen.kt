@@ -324,17 +324,27 @@ private fun KpiCards(c: ThrColors, r: PatientReport) {
     val k = r.kpis
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SmallKpi(c, "SESSIONS", "${k.sessions}", if (k.painReportedSessions > 0) "${k.painReportedSessions} with pain reported" else "No pain reported", Modifier.weight(1f), alert = k.painReportedSessions > 0)
-            SmallKpi(c, "TOTAL REPS", String.format(Locale.US, "%,d", k.totalRepetitions), r.targetRepsPerSession?.let { "Target $it per session" } ?: "Completed repetitions", Modifier.weight(1f))
+            SmallKpi(
+                c, "SESSIONS", "${k.sessions}",
+                if (k.painRate > 0) "${k.painRate.toInt()}% with pain (${k.stoppedPainSessions} stopped)" else "No pain reported",
+                Modifier.weight(1f), alert = k.painRate > 0
+            )
+            SmallKpi(
+                c, "ADHERENCE", k.adherenceRate?.let { "${it.toInt()}%" } ?: "—",
+                "${String.format(Locale.US, "%,d", k.totalRepetitions)} reps completed",
+                Modifier.weight(1f)
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SmallKpi(
-                c, "BEST PEAK ROM", k.bestPeakRomDeg?.let { "${it.toInt()}°" } ?: "—",
-                k.averagePeakRomDeg?.let { "Average ${it.toInt()}°" } ?: "No repetitions in range", Modifier.weight(1f),
+                c, "PEAK ROM", k.bestPeakRomDeg?.let { "${it.toInt()}°" } ?: "—",
+                k.averagePeakRomDeg?.let { "Avg ${it.toInt()}°" + (k.romProgressionDelta?.let { d -> " (${if (d > 0) "+" else ""}${d.toInt()}°)" } ?: "") } ?: "No repetitions in range",
+                Modifier.weight(1f),
             )
             SmallKpi(
                 c, "AVG SMOOTHNESS", k.averageSmoothness?.let { "${(it * 100).toInt()}%" } ?: "—",
-                if (k.averageSmoothness != null) "Sessions that measured it" else "Not measured in range", Modifier.weight(1f),
+                if (k.averageSmoothness != null) "Weighted by repetitions" else "Not measured in range",
+                Modifier.weight(1f),
             )
         }
     }
@@ -492,7 +502,7 @@ private fun WeeklyRepsCard(c: ThrColors, r: PatientReport) {
             }
         }
         Text(
-            "Adherence score needs a prescribed schedule and is not calculated yet.",
+            "Daily distribution of repetitions. See adherence KPI for target completion.",
             style = thrText(11.sp, FontWeight.Medium, c.faint, line = 15.sp),
         )
     }

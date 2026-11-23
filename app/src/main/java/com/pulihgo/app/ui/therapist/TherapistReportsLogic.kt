@@ -20,9 +20,14 @@ data class ReportKpis(
     val totalRepetitions: Int,
     val bestPeakRomDeg: Double?,
     val averagePeakRomDeg: Double?,
-    /** Mean of the sessions that measured smoothness; null when none did. */
+    /** Mean of the sessions that measured smoothness, weighted by repetitions; null when none did. */
     val averageSmoothness: Double?,
     val painReportedSessions: Int,
+    val adherenceRate: Double?,
+    val romProgressionDelta: Double?,
+    val painRate: Double,
+    val mildPainSessions: Int,
+    val stoppedPainSessions: Int,
 )
 
 data class RomTrendPoint(val label: String, val peakRomDeg: Double)
@@ -62,8 +67,9 @@ data class PatientReport(
 )
 
 /**
- * PGF-THR-06 — per-patient report data for the Reports UI. KPI definitions here are simple
- * aggregates of saved sessions; PGF-THR-07 (Erza) owns the final KPI calculations.
+ * PGF-THR-06 / PGF-THR-07 — per-patient report data for the Reports UI. 
+ * KPI calculations are finalized, filtering out seeded data and using advanced 
+ * metrics (adherence, weighted smoothness, ROM delta).
  */
 object TherapistReportsLogic {
     private val dayLabel = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
@@ -97,7 +103,6 @@ object TherapistReportsLogic {
         val all = patient.sessions.sortedByDescending { it.record.endedAtEpochMs }
         val inRange = all.filter { s -> val d = dateOf(s); (start == null || !d.isBefore(start)) && !d.isAfter(today) }
         val withReps = inRange.filter { it.record.repetitions > 0 }
-        val smooth = inRange.mapNotNull { it.record.averageSmoothness }
         val exerciseIds = all.map { it.record.exerciseId }.distinct()
         val exercise = exerciseIds.singleOrNull()?.let { exercises[it] }
         val weekStart = today.minusDays(6)
@@ -110,6 +115,43 @@ object TherapistReportsLogic {
                 isToday = date == today,
             )
         }
+        val targetRepsPerSession = all.firstNotNullOfOrNull { it.targetReps } ?: exercise?.targetReps?.takeIf { it > 0 }
+
+        var adherenceRate: Double? = null
+        if (targetRepsPerSession != null && targetRepsPerSession > 0 && inRange.isNotEmpty()) {
+            val targetTotalReps = inRange.size * targetRepsPerSession
+            val totalActualReps = inRange.sumOf { it.record.repetitions }
+            adherenceRate = (totalActualReps.toDouble() / targetTotalReps.toDouble()) * 100.0
+        }
+
+        var averageSmoothness: Double? = null
+        var totalSmoothnessWeight = 0
+        var weightedSmoothnessSum = 0.0
+        for (s in inRange) {
+            val sm = s.record.averageSmoothness
+            val r = s.record.repetitions
+            if (sm != null && r > 0) {
+                weightedSmoothnessSum += sm * r
+                totalSmoothnessWeight += r
+            }
+        }
+        if (totalSmoothnessWeight > 0) {
+            averageSmoothness = weightedSmoothnessSum / totalSmoothnessWeight
+        }
+
+        val mildPainSessions = inRange.count { it.record.painLevel == SessionPainLevel.MILD_PAIN }
+        val stoppedPainSessions = inRange.count { it.record.painLevel == SessionPainLevel.STOPPED_DUE_TO_PAIN }
+        val painReportedSessions = mildPainSessions + stoppedPainSessions
+        val painRate = if (inRange.isNotEmpty()) (painReportedSessions.toDouble() / inRange.size.toDouble()) * 100.0 else 0.0
+
+        var romProgressionDelta: Double? = null
+        if (withReps.size >= 2) {
+            // withReps is sorted byEndedDesc (newest first)
+            val oldestRom = withReps.last().record.peakRomDeg
+            val newestRom = withReps.first().record.peakRomDeg
+            romProgressionDelta = newestRom - oldestRom
+        }
+
         return PatientReport(
             patientId = patient.patient.id,
             name = patient.name,
@@ -121,14 +163,19 @@ object TherapistReportsLogic {
                 totalRepetitions = inRange.sumOf { it.record.repetitions },
                 bestPeakRomDeg = withReps.maxOfOrNull { it.record.peakRomDeg },
                 averagePeakRomDeg = withReps.map { it.record.peakRomDeg }.takeIf { it.isNotEmpty() }?.average(),
-                averageSmoothness = smooth.takeIf { it.isNotEmpty() }?.average(),
-                painReportedSessions = inRange.count { it.record.painLevel != SessionPainLevel.NO_PAIN },
+                averageSmoothness = averageSmoothness,
+                painReportedSessions = painReportedSessions,
+                adherenceRate = adherenceRate,
+                romProgressionDelta = romProgressionDelta,
+                painRate = painRate,
+                mildPainSessions = mildPainSessions,
+                stoppedPainSessions = stoppedPainSessions,
             ),
             romTrend = withReps.reversed().map { RomTrendPoint(dateOf(it).format(dayLabel), it.record.peakRomDeg) },
             targetRomDeg = all.firstNotNullOfOrNull { it.targetRomDeg } ?: exercise?.targetRomDeg,
             romCeilingDeg = exercise?.romCeilingDeg,
             week = week,
-            targetRepsPerSession = all.firstNotNullOfOrNull { it.targetReps } ?: exercise?.targetReps?.takeIf { it > 0 },
+            targetRepsPerSession = targetRepsPerSession,
             rows = inRange.map { s ->
                 val zdt = Instant.ofEpochMilli(s.record.startedAtEpochMs).atZone(zone)
                 ReportSessionRow(
