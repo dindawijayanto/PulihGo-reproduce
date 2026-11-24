@@ -1,0 +1,29 @@
+/* PGF-THR-04: scoped styles so existing Therapist Dashboard/List/Reports are unchanged. */
+.pd-overview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.pd-profile, .pd-comfort { min-width: 0; }
+.pd-identity { display: flex; align-items: center; gap: 16px; }
+.pd-identity h2 { font-size: 21px; line-height: 1.35; overflow-wrap: anywhere; }
+.pd-avatar { width: 68px; height: 68px; display: grid; place-items: center; flex: 0 0 68px; border-radius: 14px; background: var(--chip); color: var(--accent); font-size: 23px; font-weight: 800; }
+.pd-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--divider); }
+.pd-facts div { min-width: 0; }
+.pd-facts dt { text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-size: 11px; font-weight: 700; }
+.pd-facts dd { margin: 6px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.pd-fact-full { grid-column: 1 / -1; }
+.pd-comfort-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pd-comfort-message { margin: 18px 0 22px; color: var(--text); line-height: 1.7; min-height: 3.4em; }
+.pd-comfort-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pd-comfort-counts > div { min-width: 0; border: 1px solid color-mix(in srgb, var(--divider) 45%, transparent); background: var(--inset); padding: 14px 10px; border-radius: 9px; }
+.pd-comfort-counts b { display: block; font-size: 22px; }
+.pd-comfort-counts span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; line-height: 1.5; }
+.pd-footnote { font-size: 11px; line-height: 1.6; margin-top: 16px; }
+.pd-section { margin-top: 25px; }
+.pd-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 13px; }
+.pd-section-heading h2 { font-size: 18px; }
+.pd-kpis .kpi { border: 1px solid color-mix(in srgb, var(--divider) 30%, transparent); }
+.pd-history th, .pd-history td { white-space: nowrap; }
+.pd-history td:nth-child(2) { white-space: normal; min-width: 155px; }
+.pd-seed-tag { display: inline-block; margin: 5px 0 0; }
+.pd-session-link { white-space: nowrap; }
+.pd-empty-actions { display: flex; align-items: center; justify-content: center; gap: 16px; }
+@media (max-width: 950px) { .pd-overview { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .pd-facts { grid-template-columns: 1fr; } .pd-comfort-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
