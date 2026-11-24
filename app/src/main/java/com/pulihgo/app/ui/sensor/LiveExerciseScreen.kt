@@ -69,6 +69,7 @@ import com.pulihgo.app.R
 import com.pulihgo.app.data.exercise.Exercise
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.SessionPainLevel
+import com.pulihgo.app.quality.PainCheckSessionGate
 import com.pulihgo.app.quality.RomSafetyLevel
 import com.pulihgo.app.sensor.AngleCalibrator
 import com.pulihgo.app.sensor.Axis
@@ -125,6 +126,9 @@ fun LiveExerciseScreen(
             calibrator = AngleCalibrator(),
         )
     }
+    val finishGate = remember(patientId, exercise.id) {
+        PainCheckSessionGate(patientId, exercise.id)
+    }
     val tracker = remember(exercise.id, exercise.targetRomDeg, exercise.romCeilingDeg) {
         runCatching { LiveExerciseTracker(exercise.targetRomDeg, exercise.romCeilingDeg) }.getOrNull()
     }
@@ -155,11 +159,12 @@ fun LiveExerciseScreen(
             controller.calibrate()
         }
     }
-    LaunchedEffect(controller, tracker) {
+    LaunchedEffect(controller, tracker, finishGate) {
         if (tracker == null) return@LaunchedEffect
         controller.samples.collect { sample ->
             val current = controller.state.value
-            if (current.calibration is CalibrationState.Calibrated &&
+            if (!finishGate.isFrozen &&
+                current.calibration is CalibrationState.Calibrated &&
                 current.health is SensorHealth.Streaming
             ) {
                 val angle = sample.angle(Axis.ROLL)
@@ -189,28 +194,20 @@ fun LiveExerciseScreen(
         }
     }
 
+    // PGF-QS-03: the gate freezes the exact metrics AND finish time at the user's action.
+    // onSessionCompleted remains the team's existing local-save + Supabase-sync callback.
     fun saveSession(pain: SessionPainLevel) {
-        val end = System.currentTimeMillis()
-        val start = startEpochMs.takeIf { it > 0L } ?: end
-        val record = runCatching {
-            ExerciseSessionRecord(
-                patientId = patientId,
-                exerciseId = exercise.id,
-                startedAtEpochMs = start,
-                endedAtEpochMs = end,
-                repetitions = live.repetitions,
-                peakRomDeg = live.peakRomDeg,
-                averageSmoothness = live.averageSmoothness,
-                painLevel = pain,
-                repetitionDetails = live.completedRepetitions,
-            )
-        }.getOrNull()
-        if (record == null || !onSessionCompleted(record)) saveFailed = true
+        if (finishGate.isSaved) return
+        if (!finishGate.submit(pain, onSessionCompleted)) saveFailed = true
     }
 
     BackHandler {
-        exitToSettings = false
-        showExitConfirmation = true
+        if (showPainCheck && finishGate.cancelReview()) {
+            showPainCheck = false
+        } else {
+            exitToSettings = false
+            showExitConfirmation = true
+        }
     }
 
     Surface(Modifier.fillMaxSize().testTag("exercise_live"), color = c.background) {
@@ -338,10 +335,14 @@ fun LiveExerciseScreen(
             }
             Spacer(Modifier.height(24.dp))
             Button(
-                onClick = { showPainCheck = true },
+                onClick = {
+                    if (finishGate.beginReview(live, startEpochMs, System.currentTimeMillis())) {
+                        showPainCheck = true
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(52.dp).testTag("finish_practice"),
                 shape = RoundedCornerShape(12.dp),
-                enabled = startEpochMs > 0L,
+                enabled = startEpochMs > 0L && !finishGate.isFrozen,
                 colors = ButtonDefaults.buttonColors(containerColor = LiveTeal),
             ) {
                 Icon(painterResource(R.drawable.pg_icon_check), contentDescription = null,
@@ -351,9 +352,15 @@ fun LiveExerciseScreen(
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { saveSession(SessionPainLevel.STOPPED_DUE_TO_PAIN) },
+                onClick = {
+                    if (!finishGate.isFrozen) {
+                        finishGate.beginPainStop(live, startEpochMs, System.currentTimeMillis())
+                    }
+                    saveSession(SessionPainLevel.STOPPED_DUE_TO_PAIN)
+                },
                 modifier = Modifier.fillMaxWidth().height(52.dp).testTag("stop_it_hurts"),
                 shape = RoundedCornerShape(12.dp),
+                enabled = !finishGate.isSaved && !finishGate.isReviewPending,
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = c.softRed),
                 border = androidx.compose.foundation.BorderStroke(1.3.dp, LiveRed),
             ) {
@@ -395,7 +402,9 @@ fun LiveExerciseScreen(
     }
 
     if (showPainCheck) {
-        Dialog(onDismissRequest = { showPainCheck = false },
+        Dialog(onDismissRequest = {
+            if (finishGate.cancelReview()) showPainCheck = false
+        },
             properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Box(Modifier.fillMaxSize().background(c.background).padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center) {
@@ -429,7 +438,9 @@ fun LiveExerciseScreen(
                             saveSession(SessionPainLevel.MILD_PAIN)
                         }
                         Spacer(Modifier.height(24.dp))
-                        TextButton(onClick = { showPainCheck = false }) {
+                        TextButton(onClick = {
+                            if (finishGate.cancelReview()) showPainCheck = false
+                        }) {
                             Text("Return to Session", color = LiveTeal,
                                 fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
