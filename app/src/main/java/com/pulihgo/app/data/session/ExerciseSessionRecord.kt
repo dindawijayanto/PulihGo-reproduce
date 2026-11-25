@@ -32,6 +32,9 @@ data class ExerciseSessionRecord(
     val averageSmoothness: Double?,
     val painLevel: SessionPainLevel,
     val repetitionDetails: List<RepetitionMetric> = emptyList(),
+    /** Exact prescription snapshot for this session; absent on historical local records. */
+    val targetRomDeg: Double? = null,
+    val targetReps: Int? = null,
 ) {
     val stoppedForPain: Boolean get() = painLevel == SessionPainLevel.STOPPED_DUE_TO_PAIN
     init {
@@ -39,6 +42,8 @@ data class ExerciseSessionRecord(
         require(startedAtEpochMs > 0 && endedAtEpochMs >= startedAtEpochMs)
         require(repetitions >= 0 && peakRomDeg.isFinite() && peakRomDeg >= 0.0)
         require(averageSmoothness == null || (averageSmoothness.isFinite() && averageSmoothness in 0.0..1.0))
+        require(targetRomDeg == null || (targetRomDeg.isFinite() && targetRomDeg > 0 && targetRomDeg < 180))
+        require(targetReps == null || targetReps in 1..100)
     }
 }
 
@@ -55,6 +60,8 @@ object ExerciseSessionRecordJson {
                 put("peakRomDeg", s.peakRomDeg)
                 put("averageSmoothness", s.averageSmoothness ?: JSONObject.NULL)
                 put("painLevel", s.painLevel.name)
+                if (s.targetRomDeg != null) put("targetRomDeg", s.targetRomDeg)
+                if (s.targetReps != null) put("targetReps", s.targetReps)
                 put("repetitionDetails", JSONArray().apply {
                     s.repetitionDetails.forEach { rep ->
                         put(JSONObject().apply {
@@ -100,6 +107,8 @@ object ExerciseSessionRecordJson {
                         else o.getDouble("averageSmoothness"),
                     painLevel = SessionPainLevel.valueOf(o.getString("painLevel")),
                     repetitionDetails = details,
+                    targetRomDeg = if (o.has("targetRomDeg") && !o.isNull("targetRomDeg")) o.getDouble("targetRomDeg") else null,
+                    targetReps = if (o.has("targetReps") && !o.isNull("targetReps")) o.getInt("targetReps") else null,
                 )
             }.getOrNull()
         }

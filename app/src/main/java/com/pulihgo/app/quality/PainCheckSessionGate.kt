@@ -14,6 +14,8 @@ import com.pulihgo.app.sensor.LiveExerciseSnapshot
 class PainCheckSessionGate(
     private val patientId: String,
     private val exerciseId: String,
+    private val targetRomDeg: Double? = null,
+    private val targetReps: Int? = null,
 ) {
     init {
         require(patientId.isNotBlank())
@@ -90,6 +92,8 @@ class PainCheckSessionGate(
             averageSmoothness = s.averageSmoothness,
             painLevel = pain,
             repetitionDetails = s.completedRepetitions,
+            targetRomDeg = targetRomDeg,
+            targetReps = targetReps,
         )
         saving = true
         return try {

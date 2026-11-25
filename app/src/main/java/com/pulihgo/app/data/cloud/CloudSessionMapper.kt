@@ -20,6 +20,8 @@ object CloudSessionMapper {
         put("peak_rom_deg", record.peakRomDeg)
         put("average_smoothness", record.averageSmoothness ?: JSONObject.NULL)
         put("pain_level", record.painLevel.name)
+        if (record.targetReps != null) put("target_reps", record.targetReps)
+        if (record.targetRomDeg != null) put("target_rom_deg", record.targetRomDeg)
         put("source", "DEVICE")
         put("repetition_details", JSONArray().apply {
             record.repetitionDetails.forEach { rep ->

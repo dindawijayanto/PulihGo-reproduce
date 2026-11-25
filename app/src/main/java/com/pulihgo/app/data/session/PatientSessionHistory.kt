@@ -75,7 +75,15 @@ object SeededSessionParser {
 object PatientSessionHistory {
     /** Device sessions get a stable id from their user id and start time. */
     fun fromDevice(records: List<ExerciseSessionRecord>): List<PatientSession> =
-        records.map { PatientSession(id = "D-${it.patientId}-${it.startedAtEpochMs}", record = it, source = SessionSource.DEVICE) }
+        records.map {
+            PatientSession(
+                id = "D-${it.patientId}-${it.startedAtEpochMs}",
+                record = it,
+                source = SessionSource.DEVICE,
+                targetReps = it.targetReps,
+                targetRomDeg = it.targetRomDeg,
+            )
+        }
 
     /** All sessions for one user, newest first. */
     fun merge(seeded: List<PatientSession>, device: List<ExerciseSessionRecord>, userId: String): List<PatientSession> =

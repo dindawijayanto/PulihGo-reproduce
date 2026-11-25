@@ -126,8 +126,8 @@ fun LiveExerciseScreen(
             calibrator = AngleCalibrator(),
         )
     }
-    val finishGate = remember(patientId, exercise.id) {
-        PainCheckSessionGate(patientId, exercise.id)
+    val finishGate = remember(patientId, exercise.id, exercise.targetRomDeg, exercise.targetReps) {
+        PainCheckSessionGate(patientId, exercise.id, exercise.targetRomDeg, exercise.targetReps)
     }
     val tracker = remember(exercise.id, exercise.targetRomDeg, exercise.romCeilingDeg) {
         runCatching { LiveExerciseTracker(exercise.targetRomDeg, exercise.romCeilingDeg) }.getOrNull()

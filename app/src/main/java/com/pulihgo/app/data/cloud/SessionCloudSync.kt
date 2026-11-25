@@ -36,6 +36,23 @@ class SessionCloudSync(
             .isSuccess
     }
 
+    /**
+     * INT-02: borrow a fresh patient access token through the SAME refresh mutex used by
+     * the session uploader. This prevents rotating the Supabase refresh token concurrently.
+     * Never expose the refresh token to UI or save it in Therapy Plan cache.
+     */
+    suspend fun refreshAccessTokenForPlan(userId: String): String? = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            if (!config.isConfigured) return@withContext null
+            val token = prefs.getString(tokenKey(userId), null) ?: return@withContext null
+            runCatching {
+                val updated = client.refresh(token)
+                prefs.edit().putString(tokenKey(userId), updated.refreshToken).apply()
+                updated.accessToken
+            }.getOrNull()
+        }
+    }
+
     fun disconnect(userId: String) {
         prefs.edit().remove(tokenKey(userId)).apply()
     }
