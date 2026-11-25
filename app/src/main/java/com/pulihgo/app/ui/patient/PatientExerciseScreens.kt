@@ -31,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +106,8 @@ fun PatientExerciseLibraryScreen(
     onSummary: () -> Unit = {},
     onSettings: () -> Unit = {},
     isDark: Boolean = false,
+    planStatus: String = "",
+    planLoading: Boolean = false,
 ) {
     val c = exerciseColors(isDark)
     Column(
@@ -124,6 +127,10 @@ fun PatientExerciseLibraryScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp,
             )
+            if (planStatus.isNotBlank()) {
+                Text(planStatus, color = c.secondary, fontSize = 12.sp, lineHeight = 17.sp,
+                    modifier = Modifier.testTag("therapy_plan_library_status"))
+            }
             if (exercises.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -139,7 +146,8 @@ fun PatientExerciseLibraryScreen(
                 }
             } else {
                 exercises.forEach { exercise ->
-                    LibraryExerciseCard(exercise = exercise, c = c, onClick = { onSelectExercise(exercise) })
+                    LibraryExerciseCard(exercise = exercise, c = c,
+                        enabled = !planLoading, onClick = { onSelectExercise(exercise) })
                 }
             }
             LibrarySafetyNote(c)
@@ -174,11 +182,12 @@ private fun ExerciseSettingsButton(c: ExerciseColors, onSettings: () -> Unit) {
 }
 
 @Composable
-private fun LibraryExerciseCard(exercise: Exercise, c: ExerciseColors, onClick: () -> Unit) {
+private fun LibraryExerciseCard(exercise: Exercise, c: ExerciseColors,
+                                enabled: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().testTag("exercise_card_${exercise.id}")
             .semantics { contentDescription = "Pilih latihan ${exercise.name}" }
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = ExerciseCardShape,
         colors = CardDefaults.cardColors(containerColor = c.surface),
         border = BorderStroke(1.dp, c.outline),
@@ -291,6 +300,13 @@ fun PatientExercisePreparationScreen(
     onSettings: () -> Unit = {},
     isDark: Boolean = false,
     savedPainLevel: SessionPainLevel? = null,
+    planStatus: String = "",
+    planDetails: String = "",
+    planNotes: String = "",
+    isPlanLoading: Boolean = false,
+    isPlanReady: Boolean = true,
+    isPlanPaused: Boolean = false,
+    onRefreshPlan: () -> Unit = {},
 ) {
     val c = exerciseColors(isDark)
     Surface(Modifier.fillMaxSize().testTag("exercise_preparation"), color = c.background) {
@@ -333,9 +349,33 @@ fun PatientExercisePreparationScreen(
                             "Sit upright with your elbow bent at a comfortable 90° angle.", c)
                         PreparationInstruction(3,
                             "Hold your forearm flat in a neutral starting position.", c)
+                        Spacer(Modifier.height(14.dp))
+                        Text(planStatus, color = BrandTeal, fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp, lineHeight = 18.sp,
+                            modifier = Modifier.testTag("therapy_plan_preparation_status"))
+                        if (planDetails.isNotBlank()) {
+                            Text(planDetails, color = c.text, fontSize = 13.sp,
+                                lineHeight = 19.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp).testTag("therapy_plan_parameters"))
+                        }
+                        if (planNotes.isNotBlank()) {
+                            Text("Therapist: $planNotes", color = c.secondary, fontSize = 12.sp,
+                                lineHeight = 18.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp))
+                        }
+                        if (isPlanPaused) {
+                            Text("This exercise is paused by your therapist. Starting is disabled.",
+                                color = Color(0xFFDD4145), fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp).testTag("therapy_plan_paused"))
+                        }
+                        TextButton(onClick = onRefreshPlan, enabled = !isPlanLoading) {
+                            Text("Refresh Therapy Plan", color = BrandTeal)
+                        }
                         Spacer(Modifier.height(10.dp))
                         Button(
                             onClick = onContinueToCalibration,
+                            enabled = !isPlanLoading && isPlanReady && !isPlanPaused,
                             modifier = Modifier.fillMaxWidth().height(52.dp).testTag("start_calibration"),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = BrandTeal),

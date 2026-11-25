@@ -24,6 +24,10 @@ import com.pulihgo.app.data.cloud.CloudSyncResult
 import com.pulihgo.app.data.cloud.SessionCloudSync
 import com.pulihgo.app.data.cloud.SupabaseConfig
 import com.pulihgo.app.data.exercise.ExerciseCatalog
+import com.pulihgo.app.data.exercise.Exercise
+import com.pulihgo.app.data.therapy.PatientTherapyPlan
+import com.pulihgo.app.data.therapy.PatientTherapyPlanCloud
+import com.pulihgo.app.data.therapy.PatientTherapyPlanStore
 import com.pulihgo.app.data.session.ExerciseSessionRecord
 import com.pulihgo.app.data.session.ExerciseSessionStore
 import com.pulihgo.app.data.session.PatientSessionRepository
@@ -123,6 +127,8 @@ fun AppNavigation(
             readDevice = exerciseSessionStore::read,
         )
     }
+    val therapyStore = remember { PatientTherapyPlanStore(context.applicationContext) }
+    val therapyCloud = remember { PatientTherapyPlanCloud(SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY)) }
     val scope = rememberCoroutineScope()
     fun syncToCloud(userId: String, announce: Boolean) {
         scope.launch {
@@ -149,6 +155,15 @@ fun AppNavigation(
     var selectedReportsPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTherapistSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<User?>(sessionStore.currentUserId?.let(auth::findActiveUser)) }
+    // INT-02: never share cached or in-flight plan data across patient identities.
+    var plansForUser by remember { mutableStateOf<List<PatientTherapyPlan>>(emptyList()) }
+    var planLoadedScope by remember { mutableStateOf<String?>(null) }
+    var planSource by remember { mutableStateOf("offline") }
+    var planVerified by remember { mutableStateOf(false) }
+    var planChecking by remember { mutableStateOf(false) }
+    var planRefreshTick by remember { mutableStateOf(0) }
+    // Snapshot the exact parameters at Calibrate & Start, not after the therapist edits them.
+    var lockedSessionExercise by remember { mutableStateOf<Exercise?>(null) }
 
     var backStack by rememberSaveable(stateSaver = BackStackSaver) {
         val initialRoute = when {
@@ -174,6 +189,10 @@ fun AppNavigation(
         currentUser?.let { cloudSync.disconnect(it.id) }
         sessionStore.currentUserId = null
         currentUser = null
+        plansForUser = emptyList()
+        planLoadedScope = null
+        planVerified = false
+        lockedSessionExercise = null
         selectedExerciseId = null
         selectedTherapistPatientId = null
         selectedSummarySessionId = null
@@ -185,6 +204,10 @@ fun AppNavigation(
     fun completeLogin(loggedIn: User) {
         sessionStore.currentUserId = loggedIn.id.takeUnless { it.startsWith("U_LOCAL_") }
         currentUser = loggedIn
+        plansForUser = emptyList()
+        planLoadedScope = null
+        planVerified = false
+        lockedSessionExercise = null
         resetTo(RoleRouter.homeFor(loggedIn.role))
     }
 
@@ -197,6 +220,50 @@ fun AppNavigation(
 
     val route = RoleRouter.resolve(backStack.last(), currentUser?.role)
     val user = currentUser
+    val patientPlanUser = user?.takeIf { it.role == Role.PATIENT }
+    val cloudPatient = allPatients.firstOrNull { it.userId == patientPlanUser?.id }
+    val therapyScope = "${patientPlanUser?.id}:${cloudPatient?.id}"
+    val visiblePlans = if (planLoadedScope == therapyScope) plansForUser else emptyList()
+    val effectiveExercises = exercises.map { catalog ->
+        visiblePlans.firstOrNull { it.exerciseId == catalog.id }?.applyTo(catalog) ?: catalog
+    }
+    val planStillLoading = planLoadedScope != therapyScope || planChecking
+    val planSyncLabel = when {
+        planStillLoading -> "Checking latest Therapy Plan..."
+        !planVerified -> "Plan not verified. Connect to Supabase and refresh before starting."
+        planSource == "cloud" -> "Therapist plan checked with Supabase"
+        planSource == "cache" -> "Offline: using last saved therapist plan"
+        else -> "Offline or no cloud account: using available catalog defaults"
+    }
+
+    // Refresh on library entry AND before each new session (Preparation). Never refetch mid-session.
+    // A failure retains the last valid cache; a successful empty response clears it.
+    LaunchedEffect(route, patientPlanUser?.id, selectedExerciseId, planRefreshTick) {
+        if (route != AppRoute.PATIENT_EXERCISES && route != AppRoute.PATIENT_EXERCISE_PREPARATION) return@LaunchedEffect
+        val patient = patientPlanUser ?: return@LaunchedEffect
+        val patientId = cloudPatient?.id
+        planLoadedScope = therapyScope
+        planChecking = true
+        plansForUser = if (patientId != null) therapyStore.read(patient.id, patientId) else emptyList()
+        planSource = if (plansForUser.isNotEmpty()) "cache" else "defaults"
+        planVerified = if (patientId != null) therapyStore.hasSnapshot(patient.id, patientId)
+            else true // Local-only demo account: no matching cloud patient exists.
+        if (!SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY).isConfigured) planVerified = true
+        if (patientId != null) {
+            val accessToken = cloudSync.refreshAccessTokenForPlan(patient.id)
+            if (accessToken != null) {
+                val remote = runCatching { therapyCloud.readForPatient(patientId, accessToken) }.getOrNull()
+                if (remote != null) {
+                    therapyStore.replace(patient.id, patientId, remote)
+                    plansForUser = remote
+                    planSource = "cloud"
+                    planVerified = true
+                }
+            }
+        }
+        planChecking = false
+    }
+
     val therapistUser = user?.takeIf { it.role == Role.THERAPIST }
     val therapistProfile = remember(therapistUser?.id, therapistProfileVersion) {
         therapistUser?.let(therapistProfileStore::profile)
@@ -354,9 +421,12 @@ fun AppNavigation(
         )
 
         AppRoute.PATIENT_EXERCISES -> PatientExerciseLibraryScreen(
-            exercises = exercises,
+            exercises = effectiveExercises,
+            planStatus = planSyncLabel,
+            planLoading = planStillLoading,
             onSelectExercise = { exercise ->
                 selectedExerciseId = exercise.id
+                lockedSessionExercise = null
                 lastSavedPainLevel = null
                 navigate(AppRoute.PATIENT_EXERCISE_PREPARATION)
             },
@@ -368,14 +438,29 @@ fun AppNavigation(
         )
 
         AppRoute.PATIENT_EXERCISE_PREPARATION -> {
-            val exercise = exercises.firstOrNull { it.id == selectedExerciseId }
+            val exercise = effectiveExercises.firstOrNull { it.id == selectedExerciseId }
+            val prescription = visiblePlans.firstOrNull { it.exerciseId == selectedExerciseId }
+            val paused = prescription?.isActive == false
             if (exercise != null) {
                 PatientExercisePreparationScreen(
                     exercise = exercise,
+                    planStatus = planSyncLabel,
+                    planDetails = "Target ${exercise.targetRomDeg.toInt()}° • Ceiling ${exercise.romCeilingDeg.toInt()}° • ${exercise.targetReps} reps" +
+                        (prescription?.let { " • ${it.setsPerSession} sets • ${it.sessionsPerWeek} days/week" } ?: ""),
+                    planNotes = prescription?.notes.orEmpty(),
+                    isPlanLoading = planStillLoading,
+                    isPlanReady = planVerified,
+                    isPlanPaused = paused,
+                    onRefreshPlan = { planRefreshTick += 1 },
                     onBack = { goBack() },
                     onContinueToCalibration = {
-                        lastSavedPainLevel = null
-                        navigate(AppRoute.SENSOR_CHECK)
+                        if (!planStillLoading && planVerified && !paused &&
+                            exercise.targetRomDeg > 0.0 && exercise.romCeilingDeg > exercise.targetRomDeg
+                        ) {
+                            lockedSessionExercise = exercise.copy()
+                            lastSavedPainLevel = null
+                            navigate(AppRoute.SENSOR_CHECK)
+                        }
                     },
                     onSettings = { navigate(AppRoute.PATIENT_SETTINGS) },
                     isDark = isDark,
@@ -398,7 +483,8 @@ fun AppNavigation(
         }
 
         AppRoute.SENSOR_CHECK -> {
-            val exercise = exercises.firstOrNull { it.id == selectedExerciseId }
+            // Do not re-resolve from an updated plan while an exercise is in progress.
+            val exercise = lockedSessionExercise?.takeIf { it.id == selectedExerciseId }
             if (exercise != null && user != null) {
                 LiveExerciseScreen(
                     exercise = exercise,
