@@ -1,0 +1,40 @@
+.tp-patient { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; padding: 18px 22px; }
+.tp-avatar { background: var(--chip); color: var(--accent); border-radius: 12px; font-size: 21px; font-weight: 700; flex: 0 0 58px; height: 58px; display: grid; place-items: center; }
+.tp-patient-body { flex: 1; min-width: 0; }
+.tp-patient-body strong { font-size: 18px; }
+.tp-patient-body p { margin-top: 4px; font-size: 12px; }
+.tp-grid { display: grid; grid-template-columns: minmax(280px, 1.06fr) minmax(320px, 0.94fr); gap: 20px; align-items: start; }
+.tp-card-heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.tp-card-heading .faint { font-size: 12px; }
+.tp-context { font-size: 12px; line-height: 18px; margin: 0 0 20px; }
+.tp-exercise-list { display: flex; flex-direction: column; gap: 10px; }
+.tp-exercise { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; justify-content: space-between; background: var(--inset); border: 1px solid transparent; border-radius: 10px; padding: 16px; color: var(--text); cursor: pointer; }
+.tp-exercise.selected { border-color: var(--accent); background: var(--chip); }
+.tp-exercise:hover { border-color: var(--divider); }
+.tp-exercise.selected:hover { border-color: var(--accent); }
+.tp-exercise:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tp-exercise:disabled { opacity: .65; cursor: not-allowed; }
+.tp-exercise-name { font-weight: 600; font-size: 13px; line-height: 19px; }
+.tp-exercise-name small { display: block; margin-top: 3px; color: var(--muted); font-weight: 400; }
+.tp-note { margin-top: 22px; padding: 16px; border-radius: 10px; background: var(--inset); }
+.tp-note strong { color: var(--text); font-size: 13px; }
+.tp-note p { color: var(--muted); font-size: 12px; line-height: 18px; margin-top: 6px; }
+.tp-field { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+.tp-field > span { font-weight: 600; font-size: 12px; color: var(--muted); }
+.tp-field input, .tp-field select, .tp-field textarea, .tp-readonly { width: 100%; min-width: 0; padding: 10px 12px; color: var(--text); border: 1px solid var(--divider); background: var(--inset); border-radius: 8px; font: inherit; font-size: 14px; }
+.tp-field input, .tp-field select, .tp-readonly { min-height: 42px; }
+.tp-field textarea { resize: vertical; line-height: 20px; }
+.tp-field input:focus-visible, .tp-field textarea:focus-visible, .tp-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tp-readonly { color: var(--muted); }
+.tp-fields-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+.tp-warning { margin-top: 18px; padding: 14px; border-radius: 8px; border-left: 3px solid var(--warn-text); background: var(--inset); }
+.tp-warning b { color: var(--warn-text); font-size: 12px; }
+.tp-warning p { color: var(--muted); font-size: 12px; line-height: 18px; margin-top: 4px; }
+.tp-save { margin-top: 18px; width: 100%; background: var(--accent-strong); color: var(--on-accent); }
+.tp-message { margin-top: 13px; line-height: 20px; }
+.tp-saved-on { text-align: center; margin-top: 12px; font-size: 11px; }
+.tp-footer-note { font-size: 11px; line-height: 19px; margin-top: 20px; }
+.tp-empty-message { margin: 8px auto 14px; max-width: 530px; }
+.tp-actions { display: flex; gap: 16px; justify-content: center; align-items: center; }
+@media (max-width: 900px) { .tp-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .tp-patient { flex-wrap: wrap; } .tp-patient > .pill { margin-left: 74px; } .tp-fields-two { grid-template-columns: minmax(0, 1fr); } }

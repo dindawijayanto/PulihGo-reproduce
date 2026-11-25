@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { PatientSessionsPage } from './pages/PatientSessionsPage'
+import { TherapyPlanPage } from './pages/TherapyPlanPage'
 import { PatientsPage } from './pages/PatientsPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -49,6 +50,7 @@ export function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/patients/:patientId" element={<PatientSessionsPage />} />
+              <Route path="/patients/:patientId/therapy-plan" element={<TherapyPlanPage />} />
               <Route path="/patients/:patientId/sessions/:sessionId" element={<SessionDetailPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />

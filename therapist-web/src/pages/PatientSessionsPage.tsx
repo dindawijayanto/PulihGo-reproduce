@@ -108,6 +108,7 @@ export function PatientSessionsPage() {
         </div>
         <div className="head-actions">
           <span className="date-chip">Synced {updatedAt.toLocaleTimeString()}</span>
+          <Link className="btn-chip" to={`/patients/${encodeURIComponent(patient.id)}/therapy-plan`}>Therapy Plan</Link>
           <button className="btn-chip" onClick={reload}>Refresh</button>
         </div>
       </div>
